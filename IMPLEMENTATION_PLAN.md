@@ -705,9 +705,9 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 #### Phase CG-B — types, protocol, and authentication
 
-- [ ] Define ChatGPT raw/inventory/journal/normalized/asset/account-artifact schemas and synthetic fixture builders.
+- [x] Define ChatGPT raw/inventory/journal/normalized/asset/account-artifact schemas and synthetic fixture builders.
 - [ ] Define typed bridge requests/responses and enforce the endpoint/method/body allowlist in service worker and page world.
-- [ ] Implement ephemeral `/api/auth/session` handling and tests proving tokens never leave the page bridge.
+- [x] Implement ephemeral `/api/auth/session` handling and tests proving tokens never leave the page bridge.
 - [ ] Implement account/workspace discovery and explicit selection without cookie reads.
 - [ ] Implement preflight, reauthentication pause, rate-limit handling, error redaction, and malicious-request tests.
 
@@ -821,3 +821,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Two consecutive packages produced SHA-256 `1ac94298f2e3cd59207fc3fcc738c8fd0489bcd61d9cedbf148f6d16c524a394`. No ChatGPT authentication or personal conversation data was accessed.
 - The test runner now explicitly scopes Vitest to this repository's tests so ignored upstream Jest suites cannot be collected, and it locates a Playwright Chromium installation without depending on branded Chrome's extension behavior in headless mode.
 - Next: define the complete provider schemas and typed allowlisted transport, then prove page-local ephemeral authentication with synthetic tests before touching a live account.
+
+### 2026-08-01 — Provider schemas and page-local authentication implemented
+
+- Commit `89ba629` defines versioned archive, inventory-page, capture-journal, normalized graph, asset, workspace, account-artifact, and manifest types plus runtime validators for current ChatGPT listing/detail/account/session envelopes and reusable synthetic graph fixtures.
+- Commit `ede1072` replaces the arbitrary-path baseline with typed operation descriptors. The dashboard-side request cannot specify a URL, method, headers, or arbitrary body; the service worker, isolated relay, and page bridge validate the descriptor independently, and the page bridge alone resolves the endpoint.
+- `PageLocalAuth` fetches `/api/auth/session`, retains its access token only in a private page-world field, refreshes near expiry, clears it on authentication failure, and exposes only sanitized expiry metadata across the bridge.
+- Passed TypeScript checking, 15/15 unit tests, privacy scanning over 32 tracked/unignored files, production build, and a packaged Chromium test that exercises a synthetic session and authenticated conversation listing. The browser test proves the token is absent from observable extension responses and rejects an injected arbitrary origin/path request.
+- Fixed a browser-only binding failure discovered by the packaged test: native `window.fetch` is now invoked through a closure so it retains the correct receiver. No live account or private conversation data was accessed.
+- Next: complete every remaining endpoint descriptor, implement sanitized multi-workspace discovery and explicit selection, then add preflight/error/rate-limit/malicious-request coverage before live calibration.
