@@ -30,6 +30,7 @@ function classify(conversation, serialized, assets) {
   const createdAt = typeof conversation.createTime === "number" ? conversation.createTime : null;
 
   if (messages.length <= 4) categories.add("short");
+  if (messages.length <= 6 && /\b(test|testing|synthetic|hello|ping)\b/.test(serialized)) categories.add("calibration");
   if (messages.length >= 50) categories.add("long");
   if (nodes.some((node) => Array.isArray(node.childIds) && node.childIds.length > 1)) categories.add("branched");
   if (createdAt !== null && createdAt < Date.UTC(2024, 0, 1) / 1000) categories.add("old");
@@ -63,7 +64,7 @@ function anchors(conversation) {
 const archiveRoot = option("--archive-root");
 const cdp = option("--cdp");
 const categoryOrder = [
-  "short", "long", "old", "new", "branched", "archived", "project", "shared",
+  "calibration", "short", "long", "old", "new", "branched", "archived", "project", "shared",
   "cited_or_browsed", "tool_or_code", "uploaded_file", "generated_image", "canvas", "deep_research",
 ];
 const selectedCategories = optionalOption("--categories")?.split(",").filter(Boolean) ?? categoryOrder;
