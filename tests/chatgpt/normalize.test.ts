@@ -73,4 +73,15 @@ describe("loss-aware ChatGPT normalization", () => {
     expect(markdown).toContain("# &lt;unsafe&gt;");
     expect(markdown).toContain("````md\n```embedded```\n````");
   });
+
+  it("recognizes browsing and completed deep-research result records while retaining metadata", () => {
+    const raw = conversationDetail();
+    const message = raw.mapping["assistant-1"]!.message!;
+    message.content = { content_type: "tether_browsing_display", result: "Research synthesis" };
+    message.metadata = { is_async_task_result_message: true, deep_research_version: "full", task_id: "synthetic-task" };
+    const normalized = normalizeConversation(raw, inventory, "a".repeat(32));
+    const parts = normalized.messages.find((item) => item.nodeId === "assistant-1")!.parts;
+    expect(parts.map((part) => part.kind)).toEqual(["tool_result", "deep_research"]);
+    expect(JSON.stringify(parts)).toContain("synthetic-task");
+  });
 });

@@ -106,6 +106,7 @@ export interface NormalizedContentPart {
     | "tool_call"
     | "tool_result"
     | "reasoning_summary"
+    | "deep_research"
     | "canvas"
     | "asset"
     | "unknown";

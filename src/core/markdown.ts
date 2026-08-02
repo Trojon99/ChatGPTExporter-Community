@@ -54,7 +54,7 @@ function renderPart(part: NormalizedContentPart): string[] {
     const fence = codeFence(part.text ?? "");
     return [`${fence}${part.language ?? ""}`, part.text ?? "", fence, ""];
   }
-  if (["execution_output", "tool_call", "tool_result", "reasoning_summary", "canvas"].includes(part.kind)) {
+  if (["execution_output", "tool_call", "tool_result", "reasoning_summary", "deep_research", "canvas"].includes(part.kind)) {
     return [`**${part.kind.replaceAll("_", " ")}**`, "", escapeText(part.text ?? ""), ""];
   }
   if (part.kind === "citation") {

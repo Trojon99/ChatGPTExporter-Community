@@ -109,6 +109,14 @@ function normalizeParts(message: ChatGptMessage, nodeId: string, findings: Valid
     findings.push({ severity: "warning", code: "UNKNOWN_CONTENT_TYPE", message: `Unknown content type ${type}.`, nodeId, messageId: message.id });
   }
   appendContentReferences(message, parts, nodeId, findings);
+  if (message.metadata?.is_async_task_result_message === true || typeof message.metadata?.deep_research_version === "string") {
+    parts.push({
+      kind: "deep_research",
+      title: "Deep research result",
+      text: contentText(content),
+      raw: toJsonValue(message.metadata),
+    });
+  }
   if (parts.length === 0) parts.push({ kind: "text", text: "", raw: toJsonValue(content) });
   return parts;
 }
