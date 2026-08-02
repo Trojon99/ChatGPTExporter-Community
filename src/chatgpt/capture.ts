@@ -84,7 +84,7 @@ export class ChatGptDetailFetcher {
         parsed = parseConversationDetail(raw);
         id = parsed.id ?? parsed.conversation_id ?? null;
         if (!id || !requestedIds.includes(id)) continue;
-        if (graphFindings(parsed).length) issue = "batch_graph_suspicious";
+        if (!hasOnlySafeCompactNullRoot(raw) || graphFindings(parsed).length) issue = "batch_graph_suspicious";
       } catch (error) {
         if (!(error instanceof EnvelopeError)) throw error;
         id = looseConversationId(raw);
@@ -207,6 +207,30 @@ function batchCandidates(value: JsonValue): JsonValue[] {
   if (Array.isArray(object.items)) return object.items;
   if (Array.isArray(object.conversations)) return object.conversations;
   return Object.values(object);
+}
+
+function hasOnlySafeCompactNullRoot(value: JsonValue): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const conversation = value as Record<string, JsonValue>;
+  if (!conversation.mapping || typeof conversation.mapping !== "object" || Array.isArray(conversation.mapping)) return false;
+  const mapping = conversation.mapping as Record<string, JsonValue>;
+  const placeholders = Object.entries(mapping).filter(([, rawNode]) => {
+    if (!rawNode || typeof rawNode !== "object" || Array.isArray(rawNode)) return false;
+    const node = rawNode as Record<string, JsonValue>;
+    return node.parent === undefined && node.message === undefined;
+  });
+  if (placeholders.length === 0) return true;
+  if (placeholders.length !== 1) return false;
+  const [placeholderId, rawPlaceholder] = placeholders[0]!;
+  const placeholder = rawPlaceholder as Record<string, JsonValue>;
+  if (!Object.keys(placeholder).every((key) => key === "id" || key === "children")) return false;
+  if (conversation.current_node === placeholderId) return false;
+  for (const [nodeId, rawNode] of Object.entries(mapping)) {
+    if (nodeId === placeholderId || !rawNode || typeof rawNode !== "object" || Array.isArray(rawNode)) continue;
+    const children = (rawNode as Record<string, JsonValue>).children;
+    if (Array.isArray(children) && children.includes(placeholderId)) return false;
+  }
+  return true;
 }
 
 function looseConversationId(value: JsonValue): string | null {

@@ -194,12 +194,15 @@ function parseMappingNode(value: unknown, key: string): ChatGptMappingNode {
   if (!Array.isArray(object.children) || !object.children.every((child) => typeof child === "string" && child.length > 0)) {
     throw new EnvelopeError(`mapping node ${key}.children must be string identifiers`);
   }
+  const compactNullRoot = object.parent === undefined
+    && object.message === undefined
+    && Object.keys(object).every((field) => field === "id" || field === "children");
   return {
     ...object,
     id,
-    parent: nullableString(object.parent, `mapping node ${key}.parent`),
+    parent: compactNullRoot ? null : nullableString(object.parent, `mapping node ${key}.parent`),
     children: [...object.children],
-    message: object.message === null ? null : parseMessage(object.message, key),
+    message: compactNullRoot || object.message === null ? null : parseMessage(object.message, key),
   };
 }
 

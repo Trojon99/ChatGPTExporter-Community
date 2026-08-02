@@ -29,6 +29,17 @@ describe("ChatGPT provider envelopes", () => {
     expect(() => parseConversationDetail(detail)).toThrow("does not match node id");
   });
 
+  it("expands the live compact null-root node without tolerating other omissions", () => {
+    const compact = conversationDetail() as unknown as { mapping: Record<string, Record<string, unknown>> };
+    delete compact.mapping["root-1"]!.parent;
+    delete compact.mapping["root-1"]!.message;
+    expect(parseConversationDetail(compact).mapping["root-1"]).toMatchObject({ parent: null, message: null });
+
+    const malformed = conversationDetail() as unknown as { mapping: Record<string, Record<string, unknown>> };
+    delete malformed.mapping["user-1"]!.message;
+    expect(() => parseConversationDetail(malformed)).toThrow("message must be an object");
+  });
+
   it("validates sanitized account metadata", () => {
     expect(parseAccountsEnvelope({
       accounts: {

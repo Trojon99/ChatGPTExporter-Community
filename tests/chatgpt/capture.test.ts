@@ -27,6 +27,33 @@ describe("ChatGPT batch-first detail retrieval", () => {
     expect(transport.request).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts only the live compact null-root batch variant", async () => {
+    const compact = conversationDetail() as unknown as { mapping: Record<string, Record<string, JsonValue>> };
+    delete compact.mapping["root-1"]!.parent;
+    delete compact.mapping["root-1"]!.message;
+    const transport = transportFor((operation) => {
+      if (operation.operation === "conversation_batch") return [compact as unknown as JsonValue];
+      throw new Error(`unexpected ${operation.operation}`);
+    });
+    const result = await new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()]);
+    expect(result.conversations[0]).toMatchObject({ source: "batch", detail: { mapping: { "root-1": { parent: null, message: null } } } });
+    expect(transport.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back when a compact placeholder is not a detached root", async () => {
+    const compactNonRoot = conversationDetail() as unknown as { mapping: Record<string, Record<string, JsonValue>> };
+    delete compactNonRoot.mapping["user-1"]!.parent;
+    delete compactNonRoot.mapping["user-1"]!.message;
+    const transport = transportFor((operation) => {
+      if (operation.operation === "conversation_batch") return [compactNonRoot as unknown as JsonValue];
+      if (operation.operation === "conversation_detail") return conversationDetail() as unknown as JsonValue;
+      throw new Error(`unexpected ${operation.operation}`);
+    });
+    const result = await new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()]);
+    expect(result.conversations[0]).toMatchObject({ source: "single", fallbackReason: "batch_graph_suspicious" });
+    expect(transport.request).toHaveBeenCalledTimes(2);
+  });
+
   it("falls back individually for omitted, malformed, duplicate, and graph-suspicious batch records", async () => {
     const items = ["conversation-1", "conversation-2", "conversation-3", "conversation-4"].map(inventoryItem);
     const transport = transportFor((operation) => {
