@@ -697,11 +697,11 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 #### Phase CG-A — baseline and privacy boundary
 
-- [ ] Record clean status, current commit, build hash, package hash, and full test results for GrokExporter.
-- [ ] Create `/home/travis/Projects/ChatGPTExport`, initialize Git, add license/package skeleton, and establish ignore/privacy scanning before research or live data.
+- [x] Record clean status, current commit, build hash, package hash, and full test results for GrokExporter.
+- [x] Create `/home/travis/Projects/ChatGPTExport`, initialize Git, add license/package skeleton, and establish ignore/privacy scanning before research or live data.
 - [ ] Copy the minimal proven core/build/dashboard files with provenance notes and prove the empty extension builds.
-- [ ] Clone and pin upstream references under ignored paths; write the research/license matrix.
-- [ ] Add this ChatGPT plan to the sibling repository and make it the goal's authoritative checklist.
+- [x] Clone and pin upstream references under ignored paths; write the research/license matrix.
+- [x] Add this ChatGPT plan to the sibling repository and make it the goal's authoritative checklist.
 
 #### Phase CG-B — types, protocol, and authentication
 
@@ -804,3 +804,11 @@ Append dated entries here and copy them into the sibling plan. Each entry must s
 - whether any user action such as sign-in or directory permission is required.
 
 The first implementation entry should record the Grok baseline, sibling repository initialization, upstream pins, privacy exclusions, and the persistent goal ID. Later entries must never claim “all chats downloaded” until the independent reconciliation and unchanged-repeat checks pass.
+
+### 2026-08-01 — ChatGPT implementation began
+
+- Created persistent goal `019f8070-7650-7d32-9078-e19f06f2557c`; its completion condition includes the private real-account download, independent reconciliation, unchanged repeat, unified-archive import, and final shared-core consolidation.
+- Verified GrokExporter source baseline `85922d6d307550dc046862e324a38cd68966db6d` with 30/30 tests, typechecking, privacy scan over 58 tracked/unignored files, extension build, and release package SHA-256 `c4957b3dfb679b651c7db2dc32eb5f26527b1829f5af30b2d74afdf039864e7a`. The plan-only baseline commit is `2c01972ee2fa7b4bff9bcc7bc09807f3e1a5ee29`; source and package bytes are unchanged.
+- Initialized `/home/travis/Projects/ChatGPTExport` with the privacy boundary before upstream research or live access. Commits `c703807`, `33eb95e`, and `a803813` establish ignores/scanning/hooks, adopt the authoritative plan, and pin the MIT research references.
+- Confirmed `research/repos/` is ignored and contains the exact upstream revisions in the research matrix. No ChatGPT authentication, endpoint, account, or conversation data has been accessed.
+- Next: copy the minimal build/dashboard/core baseline with provenance, replace Grok branding and host permissions with a no-network ChatGPT skeleton, and prove the packaged extension before implementing authentication.
