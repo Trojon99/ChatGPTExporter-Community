@@ -6,6 +6,7 @@ describe("page-local chunked asset sessions", () => {
   it("keeps signed URLs private and returns bounded sequential chunks", async () => {
     const bytes = new TextEncoder().encode("synthetic asset bytes");
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      expect(init?.credentials).toBe("omit");
       const range = new Headers(init?.headers).get("Range")!;
       const match = /bytes=(\d+)-(\d+)/.exec(range)!;
       const start = Number(match[1]);
@@ -30,6 +31,32 @@ describe("page-local chunked asset sessions", () => {
     expect(new TextDecoder().decode(joined)).toBe("synthetic asset bytes");
     expect(second.eof).toBe(true);
     expect(sessions.close(opened.handleId as string)).toMatchObject({ closed: true });
+  });
+
+  it("includes page credentials for same-origin provider downloads", async () => {
+    vi.stubGlobal("location", new URL("https://chatgpt.com/"));
+    try {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+        expect(init?.credentials).toBe("include");
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 206,
+          headers: { "Content-Range": "bytes 0-2/3" },
+        });
+      });
+      const sessions = new PageAssetSessions(fetcher);
+      const opened = sessions.open({
+        download_url: "/backend-api/estuary/content?fixture=synthetic",
+        file_size_bytes: 3,
+      });
+      expect(opened.expectedBytes).toBe(3);
+      await expect(sessions.chunk(opened.handleId as string, 0, 3)).resolves.toMatchObject({
+        byteLength: 3,
+        eof: true,
+        totalBytes: 3,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("rejects arbitrary origins, invalid handles, oversized chunks, and range mismatches", async () => {

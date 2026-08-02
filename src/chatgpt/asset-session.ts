@@ -25,7 +25,7 @@ export class PageAssetSessions {
     const url = validateAssetUrl(rawUrl);
     const handleId = crypto.randomUUID();
     const mediaType = firstString(value, ["mime_type", "mimeType", "content_type"]);
-    const expectedBytes = firstNumber(value, ["size", "bytes", "content_length"]);
+    const expectedBytes = firstNumber(value, ["size", "bytes", "content_length", "file_size_bytes", "fileSizeBytes"]);
     this.handles.set(handleId, {
       url: url.toString(),
       mediaType,
@@ -51,9 +51,11 @@ export class PageAssetSessions {
     }
     let response: Response;
     try {
+      const assetUrl = new URL(handle.url);
+      const sameOrigin = typeof location !== "undefined" && assetUrl.origin === location.origin;
       response = await this.fetcher(handle.url, {
         method: "GET",
-        credentials: "omit",
+        credentials: sameOrigin ? "include" : "omit",
         cache: "no-store",
         redirect: "follow",
         referrerPolicy: "no-referrer",
