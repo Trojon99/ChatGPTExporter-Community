@@ -173,8 +173,8 @@ function parseConversationListItem(value: unknown, index: number): ChatGptConver
     ...object,
     id: requiredIdentifier(object.id, `conversation page.items[${index}].id`),
     title: nullableString(object.title, `conversation page.items[${index}].title`),
-    create_time: nullableFiniteNumber(object.create_time, `conversation page.items[${index}].create_time`),
-    update_time: nullableFiniteNumber(object.update_time, `conversation page.items[${index}].update_time`),
+    create_time: nullableTimestamp(object.create_time, `conversation page.items[${index}].create_time`),
+    update_time: nullableTimestamp(object.update_time, `conversation page.items[${index}].update_time`),
   };
 }
 
@@ -243,6 +243,13 @@ function nullableFiniteNumber(value: unknown, name: string): number | null {
   if (value === null) return null;
   if (typeof value !== "number" || !Number.isFinite(value)) throw new EnvelopeError(`${name} must be a finite number or null`);
   return value;
+}
+
+function nullableTimestamp(value: unknown, name: string): number | null {
+  if (typeof value !== "string") return nullableFiniteNumber(value, name);
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) throw new EnvelopeError(`${name} must be a finite number, ISO-8601 string, or null`);
+  return milliseconds / 1_000;
 }
 
 function nonNegativeInteger(value: unknown, name: string): number {

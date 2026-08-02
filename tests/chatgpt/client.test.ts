@@ -38,6 +38,21 @@ describe("ChatGPT account discovery and preflight", () => {
     const emptyWorkspace = (await emptyClient.discoverWorkspaces())[0]!;
     expect((await emptyClient.preflight(emptyWorkspace)).recognizedEmptyAccount).toBe(true);
   });
+
+  it("accepts ISO-8601 timestamps from the live conversation listing envelope", async () => {
+    const transport = fixtureTransport({
+      items: [{
+        id: "conversation-1",
+        title: "Synthetic",
+        create_time: "2026-08-01T12:00:00.000000+00:00",
+        update_time: "2026-08-01T12:01:30.000000+00:00",
+      }],
+    });
+    const client = new ChatGptClient(transport);
+    const workspace = (await client.discoverWorkspaces())[0]!;
+
+    expect((await client.preflight(workspace)).sampledConversationId).toBe("conversation-1");
+  });
 });
 
 function fixtureTransport(pageOverrides: Record<string, JsonValue> = {}): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
