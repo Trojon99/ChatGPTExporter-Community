@@ -5,6 +5,20 @@ interface FileSystemHandle {
 
 interface FileSystemDirectoryHandle extends FileSystemHandle {
   readonly kind: "directory";
+  getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FileSystemDirectoryHandle>;
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
+}
+
+interface FileSystemFileHandle extends FileSystemHandle {
+  readonly kind: "file";
+  getFile(): Promise<File>;
+  createWritable(options?: { keepExistingData?: boolean }): Promise<FileSystemWritableFileStream>;
+}
+
+interface FileSystemWritableFileStream {
+  write(data: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+  abort(reason?: unknown): Promise<void>;
 }
 
 interface Window {
