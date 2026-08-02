@@ -717,7 +717,7 @@ Agents must update the progress journal, decision log, and lessons after each me
 - [x] Implement archived-history pagination and membership merging.
 - [x] Implement project discovery and every project cursor chain.
 - [x] Implement shared-conversation inventory and ownership linking.
-- [ ] Implement multi-workspace inventory, stable workspace fingerprints, and collision-safe logical keys.
+- [x] Implement multi-workspace inventory, stable workspace fingerprints, and collision-safe logical keys.
 - [x] Persist inventory before capture and add reconciliation/page-termination reports.
 
 #### Phase CG-D — capture, normalization, and assets
@@ -849,3 +849,11 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Commit `bdf4b78` wires the engine into the packaged dashboard. Inventory remains disabled until explicit workspace preflight and directory permission pass; users can include archived, project, and shared scopes, while main history is always required.
 - Passed TypeScript checking, 24/24 unit tests, privacy scanning over 41 tracked/unignored files, production build, and packaged Chromium authentication/preflight acceptance. No live account or private conversation data was accessed.
 - Next: add explicit multi-workspace orchestration and isolated destinations, then begin batch/detail capture with missing-ID and graph-equivalence checks against the durable inventory.
+
+### 2026-08-01 — Multi-workspace inventory isolation completed
+
+- Commit `271cf72` completes CG-C by changing explicit selection from one workspace to one-or-more workspaces, preflighting every selection, and creating a separate `ChatGPTExport-<workspace-fingerprint>/` archive below the chosen parent directory.
+- `runWorkspaceInventories` rejects empty, duplicate, or deactivated target sets and runs every scope independently with the selected raw account ID held only in memory for request headers. Identical provider conversation IDs in two accounts produce distinct logical keys and distinct filesystems.
+- The dashboard reports only aggregate workspace-scoped counts and short one-way fingerprints. Tests prove two workspaces with the same conversation ID publish isolated inventories with no logical-key collision.
+- Passed TypeScript checking, 25/25 unit tests, privacy scanning over 41 tracked/unignored files, production build, and packaged Chromium multi-select preflight acceptance. Phase CG-C now has implementation and synthetic evidence for every checklist item.
+- Next: implement batch-first conversation capture with exact requested/returned ID reconciliation, suspicious batch-graph detection, single-detail recovery, raw revision persistence, journal transitions, completion markers, and crash-safe resume.
