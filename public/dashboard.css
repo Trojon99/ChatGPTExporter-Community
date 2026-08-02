@@ -25,6 +25,11 @@ h1 { margin: 8px 0 12px; font-size: clamp(42px, 7vw, 74px); line-height: .96; le
 .workspace-controls label { color: var(--muted); font-size: 12px; }
 select { width: 100%; border: 1px solid #3a443d; border-radius: 2px; background: #151a17; color: #eef2ed; padding: 11px 12px; font: 14px/1.2 sans-serif; }
 select:disabled { opacity: .45; }
+.inventory-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 24px; align-items: center; }
+fieldset { border: 1px solid var(--line); display: flex; gap: 14px; padding: 10px 12px 12px; }
+legend { color: var(--muted); font-size: 11px; padding: 0 5px; }
+fieldset label { color: #c9d1ca; font-size: 12px; white-space: nowrap; }
+input[type="checkbox"] { accent-color: var(--accent); }
 h2 { margin: 0 0 7px; font-size: 17px; }
 p { margin: 0; }
 .panel p { color: var(--muted); line-height: 1.45; }
@@ -43,4 +48,6 @@ code { color: #c8d2ca; }
   main { width: min(100% - 28px, 960px); padding-top: 28px; }
   header, .destination, .section-heading { align-items: stretch; flex-direction: column; }
   .workspace-panel { grid-template-columns: 1fr; }
+  .inventory-panel { grid-template-columns: 1fr; }
+  fieldset { flex-wrap: wrap; }
 }

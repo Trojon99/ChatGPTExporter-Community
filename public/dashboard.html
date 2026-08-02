@@ -52,6 +52,21 @@
         <button id="choose-directory" type="button" disabled>Choose directory</button>
       </section>
 
+      <section class="panel inventory-panel">
+        <div>
+          <h2>4. Build complete inventory</h2>
+          <p>Raw listing pages are saved before any conversation bodies are downloaded. Hitting a safety limit stops with an incomplete state.</p>
+        </div>
+        <fieldset>
+          <legend>Required scopes</legend>
+          <label><input id="scope-main" type="checkbox" checked disabled> Main history</label>
+          <label><input id="scope-archived" type="checkbox" checked> Archived</label>
+          <label><input id="scope-projects" type="checkbox" checked> Projects</label>
+          <label><input id="scope-shared" type="checkbox" checked> Shared</label>
+        </fieldset>
+        <button id="run-inventory" type="button" disabled>Build inventory</button>
+      </section>
+
       <section class="panel run-panel">
         <p id="status" data-state="idle">Open a signed-in ChatGPT tab to begin preflight.</p>
         <div id="log" aria-live="polite"></div>
