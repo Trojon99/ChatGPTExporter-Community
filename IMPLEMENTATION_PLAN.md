@@ -722,7 +722,7 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 #### Phase CG-D — capture, normalization, and assets
 
-- [ ] Implement batch conversation retrieval with missing-ID detection and detail fallback.
+- [x] Implement batch conversation retrieval with missing-ID detection and detail fallback.
 - [ ] Implement append-preserving raw revisions, journal transitions, completion markers, and resume.
 - [ ] Implement graph validation and loss-aware message/content normalization.
 - [ ] Implement deterministic branch-aware Markdown and normalized JSON.
@@ -857,3 +857,10 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - The dashboard reports only aggregate workspace-scoped counts and short one-way fingerprints. Tests prove two workspaces with the same conversation ID publish isolated inventories with no logical-key collision.
 - Passed TypeScript checking, 25/25 unit tests, privacy scanning over 41 tracked/unignored files, production build, and packaged Chromium multi-select preflight acceptance. Phase CG-C now has implementation and synthetic evidence for every checklist item.
 - Next: implement batch-first conversation capture with exact requested/returned ID reconciliation, suspicious batch-graph detection, single-detail recovery, raw revision persistence, journal transitions, completion markers, and crash-safe resume.
+
+### 2026-08-01 — Batch detail reconciliation implemented
+
+- Commit `370c5e5` implements conservative batches of at most ten, exact requested/returned/missing ID evidence, duplicate detection, strict envelope parsing, graph-neighbor/current-node/cycle checks, and single-detail recovery for missing, duplicate, malformed, or suspicious batch records.
+- Share-only inventory records bypass the batch endpoint and use their share ID with the dedicated shared-detail adapter. A single-detail or shared-detail graph that remains invalid fails the capture instead of producing a partial success.
+- Tests cover a complete batch with no extra requests, all four fallback reasons, shared retrieval, and rejection of an invalid recovery response. TypeScript and 29/29 unit tests pass; no live data was accessed.
+- Next: persist batch and detail revisions under each conversation, add durable journal transitions and raw-completion evidence, then make retries resume without trusting partial files.
