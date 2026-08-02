@@ -114,6 +114,7 @@ export interface NormalizedContentPart {
   title?: string;
   url?: string;
   assetId?: string;
+  assetPath?: string;
   raw: JsonValue;
 }
 

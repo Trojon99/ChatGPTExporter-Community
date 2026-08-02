@@ -69,6 +69,21 @@ describe("journaled ChatGPT capture engine", () => {
     expect(result.capturedCount).toBe(1);
     expect(transport.request).toHaveBeenCalledTimes(1);
   });
+
+  it("publishes content-addressed assets, normalized links, and a global asset index", async () => {
+    const filesystem = await fixtureFilesystem();
+    const detail = conversationDetail();
+    const encoded = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 1, 2, 3));
+    detail.mapping["user-1"]!.message!.content = {
+      content_type: "multimodal_text",
+      parts: [{ content_type: "image_asset_pointer", asset_pointer: `data:image/png;base64,${encoded}` }],
+    };
+    const result = await new ChatGptCaptureEngine({ transport: fixtureTransport(detail), filesystem, workspace, runId: "run-assets", now: clock() }).run();
+    expect(result.partialAssetCount).toBe(0);
+    expect(filesystem.paths().filter((path) => path.startsWith("assets/"))).toHaveLength(1);
+    expect(await filesystem.readText("conversations/conversation-1/conversation.md")).toContain("../../assets/");
+    expect(await filesystem.readText("indexes/assets.jsonl")).toContain('"status":"complete"');
+  });
 });
 
 async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
@@ -96,10 +111,10 @@ async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
   return filesystem;
 }
 
-function fixtureTransport(): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
+function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
     if (operation.operation !== "conversation_batch") throw new Error(`unexpected ${operation.operation}`);
-    const body = [conversationDetail() as unknown as JsonValue];
+    const body = [detail as unknown as JsonValue];
     return { requestId: "request", protocolVersion: BRIDGE_PROTOCOL_VERSION, ok: true, status: 200, body, responseBytes: JSON.stringify(body).length, correlationId: "correlation" };
   });
   return { request } as ChatGptTransport & { request: ReturnType<typeof vi.fn> };

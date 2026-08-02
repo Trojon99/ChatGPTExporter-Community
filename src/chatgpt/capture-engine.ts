@@ -9,6 +9,7 @@ import { ChatGptDetailFetcher, type RawBatchCapture, type RetrievedConversationD
 import type { ChatGptTransport, DiscoveredWorkspace } from "./client";
 import { parseConversationDetail } from "./envelopes";
 import { NORMALIZER_VERSION, normalizeConversation } from "./normalize";
+import { ChatGptAssetManager } from "./assets";
 
 export interface ConversationCompletionMarker {
   schemaVersion: 1;
@@ -22,7 +23,7 @@ export interface ConversationCompletionMarker {
   normalizedHash: string;
   markdownHash: string;
   assetsHash: string;
-  assetStatus: "not_requested";
+  assetStatus: "complete" | "partial" | "not_requested";
   normalizerVersion: string;
   completedAt: string;
 }
@@ -34,6 +35,7 @@ export interface CaptureRunResult {
   rebuiltCount: number;
   skippedCount: number;
   failedCount: number;
+  partialAssetCount: number;
 }
 
 export interface ConversationCaptureProgress {
@@ -54,6 +56,7 @@ export class ChatGptCaptureEngine {
     batchSize?: number;
     now?: () => Date;
     onProgress?: (progress: ConversationCaptureProgress) => void;
+    includeAssets?: boolean;
   }) {
     this.now = options.now ?? (() => new Date());
   }
@@ -69,7 +72,13 @@ export class ChatGptCaptureEngine {
       rebuiltCount: 0,
       skippedCount: 0,
       failedCount: 0,
+      partialAssetCount: 0,
     };
+    const assetManager = new ChatGptAssetManager({
+      transport: this.options.transport,
+      filesystem: this.options.filesystem,
+      workspace: this.options.workspace,
+    });
     const needNetwork: InventoryConversation[] = [];
     const rebuild: Array<{ conversation: InventoryConversation; rawMarker: RawCompletionMarker }> = [];
 
@@ -92,7 +101,8 @@ export class ChatGptCaptureEngine {
         const fetched = await new ChatGptDetailFetcher(this.options.transport, this.options.workspace, this.options.batchSize ?? 10).fetchAll(needNetwork);
         const batchByConversation = mapBatches(fetched.batches);
         for (const retrieved of fetched.conversations) {
-          await this.persistAndDerive(store, retrieved, batchByConversation.get(retrieved.inventory.conversationId));
+          const assetStatus = await this.persistAndDerive(store, assetManager, retrieved, batchByConversation.get(retrieved.inventory.conversationId));
+          if (assetStatus === "partial") result.partialAssetCount += 1;
           result.capturedCount += 1;
           completedThisRun.add(retrieved.inventory.logicalKey);
           this.progress("complete", result, retrieved.inventory.conversationId);
@@ -115,7 +125,8 @@ export class ChatGptCaptureEngine {
         if (rawText === undefined) throw new Error(`Validated raw detail disappeared for ${item.conversation.conversationId}.`);
         const raw = JSON.parse(rawText) as JsonValue;
         const detail = parseConversationDetail(raw);
-        await this.derive(store, item.conversation, detail, item.rawMarker, "resume-rebuild");
+        const assetStatus = await this.derive(store, assetManager, item.conversation, detail, item.rawMarker, "resume-rebuild");
+        if (assetStatus === "partial") result.partialAssetCount += 1;
         result.rebuiltCount += 1;
         this.progress("complete", result, item.conversation.conversationId);
       } catch (error) {
@@ -127,6 +138,7 @@ export class ChatGptCaptureEngine {
         throw error;
       }
     }
+    await this.writeAssetIndex(inventory);
     if (result.capturedCount + result.rebuiltCount + result.skippedCount + result.failedCount !== result.inventoryCount) {
       throw new Error("Capture result counts do not reconcile with inventory.");
     }
@@ -134,7 +146,7 @@ export class ChatGptCaptureEngine {
     return result;
   }
 
-  private async persistAndDerive(store: CaptureStore, retrieved: RetrievedConversationDetail, batch: RawBatchCapture | undefined): Promise<void> {
+  private async persistAndDerive(store: CaptureStore, assetManager: ChatGptAssetManager, retrieved: RetrievedConversationDetail, batch: RawBatchCapture | undefined): Promise<"complete" | "partial" | "not_requested"> {
     const conversation = retrieved.inventory;
     for (const listing of conversation.listingRecords ?? []) await store.writeRawRevision(conversation.conversationId, "listing", listing);
     const detailRevision = await store.writeRawRevision(conversation.conversationId, "detail", retrieved.raw);
@@ -159,24 +171,29 @@ export class ChatGptCaptureEngine {
       completedAt: this.now().toISOString(),
     };
     await store.writeRawMarker(rawMarker);
-    await this.derive(store, conversation, retrieved.detail, rawMarker, retrieved.correlationId, true);
+    return this.derive(store, assetManager, conversation, retrieved.detail, rawMarker, retrieved.correlationId, true);
   }
 
   private async derive(
     store: CaptureStore,
+    assetManager: ChatGptAssetManager,
     conversation: InventoryConversation,
     detail: ReturnType<typeof parseConversationDetail>,
     rawMarker: RawCompletionMarker,
     correlationId: string,
     alreadyWriting = false,
-  ): Promise<void> {
+  ): Promise<"complete" | "partial" | "not_requested"> {
     if (!alreadyWriting) await store.transition(conversation, "writing", { attempt: 1, correlationId, rawHash: rawMarker.detailHash });
     this.options.onProgress?.({ phase: "writing", completed: 0, total: 0, conversationId: conversation.conversationId });
     const normalized = normalizeConversation(detail, conversation, this.options.workspace.workspaceFingerprint);
     if (normalized.findings.some((finding) => finding.severity === "error")) throw new Error(`Normalization produced graph errors for ${conversation.conversationId}.`);
+    const assets = this.options.includeAssets === false
+      ? { schemaVersion: 1 as const, conversationId: conversation.conversationId, status: "not_requested" as const, assets: [] }
+      : await assetManager.capture(detail, conversation);
+    linkNormalizedAssets(normalized, assets.assets);
     const normalizedText = prettyJson(normalized);
     const markdown = renderConversationMarkdown(normalized);
-    const assetsText = prettyJson({ schemaVersion: 1, conversationId: conversation.conversationId, status: "not_requested", assets: [] });
+    const assetsText = prettyJson(assets);
     const rawMarkerText = prettyJson(rawMarker);
     const marker: ConversationCompletionMarker = {
       schemaVersion: 1,
@@ -190,7 +207,7 @@ export class ChatGptCaptureEngine {
       normalizedHash: await sha256Hex(normalizedText),
       markdownHash: await sha256Hex(markdown),
       assetsHash: await sha256Hex(assetsText),
-      assetStatus: "not_requested",
+      assetStatus: assets.status,
       normalizerVersion: NORMALIZER_VERSION,
       completedAt: this.now().toISOString(),
     };
@@ -211,6 +228,7 @@ export class ChatGptCaptureEngine {
       correlationId,
       completionHash: await sha256Hex(markerText),
     });
+    return assets.status;
   }
 
   private requireInventory(inventory: ConversationInventory | undefined): ConversationInventory {
@@ -229,6 +247,7 @@ export class ChatGptCaptureEngine {
       || marker.logicalKey !== conversation.logicalKey
       || marker.workspaceFingerprint !== this.options.workspace.workspaceFingerprint
       || marker.normalizerVersion !== NORMALIZER_VERSION
+      || (this.options.includeAssets !== false && marker.assetStatus !== "complete")
       || !sameSet(marker.listingHashes, conversation.listingHashes)) return false;
     const files: Array<[string, string]> = [
       [`${base}/raw-complete.json`, marker.rawMarkerHash],
@@ -245,6 +264,16 @@ export class ChatGptCaptureEngine {
 
   private async writeRunReport(result: CaptureRunResult): Promise<void> {
     await this.options.filesystem.writeTextAtomic(`reports/capture-${this.options.runId}.json`, prettyJson(result));
+  }
+
+  private async writeAssetIndex(inventory: ConversationInventory): Promise<void> {
+    const rows: Array<Record<string, unknown>> = [];
+    for (const conversation of inventory.conversations) {
+      const value = parseJson<{ assets?: Array<Record<string, unknown>> }>(await this.options.filesystem.readText(`${conversationBasePath(conversation.conversationId)}/assets.json`));
+      for (const asset of value?.assets ?? []) rows.push({ logicalKey: conversation.logicalKey, conversationId: conversation.conversationId, ...asset });
+    }
+    rows.sort((left, right) => `${left.logicalKey}\0${left.logicalId}`.localeCompare(`${right.logicalKey}\0${right.logicalId}`));
+    await this.options.filesystem.writeTextAtomic("indexes/assets.jsonl", rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
   }
 
   private progress(phase: ConversationCaptureProgress["phase"], result: CaptureRunResult, conversationId: string): void {
@@ -275,4 +304,17 @@ function safeFailure(error: unknown): SafeFailure {
 function sameSet(left: string[], right: string[]): boolean {
   const sortedRight = [...right].sort();
   return left.length === right.length && [...left].sort().every((value, index) => value === sortedRight[index]);
+}
+
+function linkNormalizedAssets(normalized: ReturnType<typeof normalizeConversation>, assets: Array<{ providerId: string | null; relativePath: string | null; status: string }>): void {
+  const unused = assets.filter((asset) => asset.relativePath && asset.status === "complete");
+  for (const message of normalized.messages) {
+    for (const part of message.parts) {
+      if (part.kind !== "asset" || !part.assetId) continue;
+      const providerId = part.assetId.replace(/^(?:sediment|file-service):\/\//, "");
+      let index = unused.findIndex((asset) => asset.providerId === providerId);
+      if (index < 0) index = unused.findIndex((asset) => asset.providerId === null);
+      if (index >= 0) part.assetPath = unused.splice(index, 1)[0]!.relativePath!;
+    }
+  }
 }

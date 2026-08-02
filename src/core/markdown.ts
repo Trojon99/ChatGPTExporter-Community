@@ -61,7 +61,10 @@ function renderPart(part: NormalizedContentPart): string[] {
     const label = escapeText(part.title ?? part.text ?? part.url ?? "Citation");
     return [part.url ? `[${label}](${part.url})` : label, ""];
   }
-  if (part.kind === "asset") return [`[Asset: ${escapeText(part.assetId ?? "unresolved")}]`, ""];
+  if (part.kind === "asset") {
+    const label = `Asset: ${escapeText(part.assetId ?? "unresolved")}`;
+    return [part.assetPath ? `[${label}](${part.assetPath})` : `[${label}]`, ""];
+  }
   return ["```json", JSON.stringify(part.raw, null, 2), "```", ""];
 }
 
