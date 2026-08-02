@@ -23,7 +23,13 @@ describe("ChatGPT complete inventory", () => {
         if (operation.parameters.archived) return page([{ id: "conversation-2", title: "Archived", create_time: 2, update_time: 3 }], 1, operation.parameters.offset);
         return page([{ id: "conversation-1", title: "Main", create_time: 1, update_time: 2 }], 1, operation.parameters.offset);
       }
-      if (operation.operation === "project_page") return { items: [{ gizmo: { gizmo: { id: "project-1", display: { name: "Project" } } } }], cursor: null };
+      if (operation.operation === "project_page") return {
+        items: [{ gizmo: {
+          gizmo: { id: "project-1", display: { name: "Project" }, instructions: "Synthetic project instructions" },
+          files: [{ id: "metadata-1", file_id: "project-file-1", name: "brief.pdf", type: "application/pdf", size: 42 }],
+        } }],
+        cursor: null,
+      };
       if (operation.operation === "project_conversation_page") return { items: [{ id: "conversation-1", title: "Main", create_time: 1, update_time: 2 }], cursor: null };
       if (operation.operation === "shared_page") return {
         items: [
@@ -44,6 +50,11 @@ describe("ChatGPT complete inventory", () => {
     expect(inventory.complete).toBe(true);
     expect(inventory.chains).toHaveLength(5);
     expect(inventory.conversations).toHaveLength(3);
+    expect(inventory.projects).toEqual([expect.objectContaining({
+      projectId: "project-1",
+      instructions: "Synthetic project instructions",
+      files: [expect.objectContaining({ providerId: "project-file-1", originalName: "brief.pdf", byteSize: 42 })],
+    })]);
     const main = inventory.conversations.find((conversation) => conversation.conversationId === "conversation-1")!;
     expect(main.memberships.map((membership) => membership.scope).sort()).toEqual(["main", "project", "shared"]);
     expect(filesystem.paths().filter((path) => path.startsWith("source/inventory/"))).toHaveLength(5);

@@ -9,6 +9,8 @@ import type {
   InventoryChain,
   InventoryConversation,
   InventoryPageRecord,
+  InventoryProject,
+  InventoryProjectFile,
   JsonObject,
   JsonValue,
   ScopeMembership,
@@ -53,6 +55,7 @@ export const DEFAULT_INVENTORY_SETTINGS: InventorySettings = {
 
 export class ChatGptInventoryEngine {
   private readonly conversations = new Map<string, InventoryConversation>();
+  private readonly projects = new Map<string, InventoryProject>();
   private readonly pages: InventoryPageRecord[] = [];
   private readonly chains: InventoryChain[] = [];
   private readonly now: () => Date;
@@ -77,6 +80,7 @@ export class ChatGptInventoryEngine {
       complete: this.chains.every((chain) => chain.complete),
       chains: [...this.chains],
       pages: [...this.pages],
+      projects: [...this.projects.values()].sort((left, right) => left.projectId.localeCompare(right.projectId)),
       conversations: [...this.conversations.values()].sort((left, right) => left.logicalKey.localeCompare(right.logicalKey)),
     };
     if (!inventory.complete) throw new InventoryError("INVENTORY_INCOMPLETE", "Not every inventory chain terminated normally.");
@@ -156,7 +160,7 @@ export class ChatGptInventoryEngine {
   }
 
   private async captureProjects(): Promise<void> {
-    const projects = new Map<string, { id: string; name: string | null }>();
+    const projects = new Map<string, InventoryProject>();
     const seenCursors = new Set<string>();
     let cursor: string | null = null;
     let projectPageCount = 0;
@@ -169,9 +173,10 @@ export class ChatGptInventoryEngine {
       const items = requireObjectArray(object.items, "project page.items");
       const ids: string[] = [];
       for (const [index, item] of items.entries()) {
-        const project = parseProject(item, index);
-        ids.push(project.id);
-        projects.set(project.id, project);
+        const project = { ...parseProject(item, index), rawHash: await hashJson(item) };
+        ids.push(project.projectId);
+        projects.set(project.projectId, project);
+        this.projects.set(project.projectId, project);
       }
       projectItemCount += items.length;
       const nextCursor = optionalCursor(object.cursor, "project page.cursor");
@@ -186,13 +191,13 @@ export class ChatGptInventoryEngine {
       if (pageNumber === this.options.settings.maxPagesPerChain) throw new InventoryError("INVENTORY_PAGE_LIMIT", "Project index hit the configured page limit.");
     }
     this.chains.push(chain("project-index", "project", projectPageCount, projectItemCount, 0, "cursor_exhausted"));
-    for (const project of [...projects.values()].sort((left, right) => left.id.localeCompare(right.id))) {
+    for (const project of [...projects.values()].sort((left, right) => left.projectId.localeCompare(right.projectId))) {
       await this.captureProjectConversationChain(project);
     }
   }
 
-  private async captureProjectConversationChain(project: { id: string; name: string | null }): Promise<void> {
-    const chainId = `project-${project.id}`;
+  private async captureProjectConversationChain(project: InventoryProject): Promise<void> {
+    const chainId = `project-${project.projectId}`;
     const seenIds = new Set<string>();
     const seenCursors = new Set<string>();
     let cursor: string | null = null;
@@ -201,32 +206,32 @@ export class ChatGptInventoryEngine {
     for (let pageNumber = 1; pageNumber <= this.options.settings.maxPagesPerChain; pageNumber += 1) {
       const response = await this.request({
         operation: "project_conversation_page",
-        parameters: { projectId: project.id, cursor, limit: this.options.settings.pageSize },
+        parameters: { projectId: project.projectId, cursor, limit: this.options.settings.pageSize },
       });
-      const object = requireObject(response.body, `project ${project.id} conversation page`);
-      const items = requireObjectArray(object.items, `project ${project.id} conversation page.items`);
-      const ids = items.map((item, index) => requiredId(item, `project ${project.id} item ${index}`));
+      const object = requireObject(response.body, `project ${project.projectId} conversation page`);
+      const items = requireObjectArray(object.items, `project ${project.projectId} conversation page.items`);
+      const ids = items.map((item, index) => requiredId(item, `project ${project.projectId} item ${index}`));
       const duplicateCount = ids.filter((id) => seenIds.has(id)).length;
       for (const [index, item] of items.entries()) {
         const id = ids[index]!;
         seenIds.add(id);
-        await this.mergeConversation(id, item, { scope: "project", projectId: project.id, ...(project.name === null ? {} : { projectName: project.name }) });
+        await this.mergeConversation(id, item, { scope: "project", projectId: project.projectId, ...(project.name === null ? {} : { projectName: project.name }) });
       }
       totalItems += items.length;
-      const nextCursor = optionalCursor(object.cursor, `project ${project.id} page.cursor`);
-      if (items.length === 0 && nextCursor !== null) throw new InventoryError("INVENTORY_PREMATURE_EMPTY_PAGE", `Project ${project.id} returned an empty conversation page with another cursor.`);
+      const nextCursor = optionalCursor(object.cursor, `project ${project.projectId} page.cursor`);
+      if (items.length === 0 && nextCursor !== null) throw new InventoryError("INVENTORY_PREMATURE_EMPTY_PAGE", `Project ${project.projectId} returned an empty conversation page with another cursor.`);
       const termination = nextCursor === null ? "cursor_exhausted" as const : null;
-      await this.recordPage("project", chainId, pageNumber, { ...(cursor === null ? {} : { cursor }), projectId: project.id, limit: this.options.settings.pageSize }, nextCursor, items.length, response.responseBytes, response.body, await hashIds(ids), duplicateCount, termination);
+      await this.recordPage("project", chainId, pageNumber, { ...(cursor === null ? {} : { cursor }), projectId: project.projectId, limit: this.options.settings.pageSize }, nextCursor, items.length, response.responseBytes, response.body, await hashIds(ids), duplicateCount, termination);
       this.report("project", chainId, pageNumber);
       if (nextCursor === null) {
-        this.chains.push({ ...chain(chainId, "project", pageNumber, totalItems, seenIds.size, "cursor_exhausted"), projectId: project.id });
+        this.chains.push({ ...chain(chainId, "project", pageNumber, totalItems, seenIds.size, "cursor_exhausted"), projectId: project.projectId });
         return;
       }
-      if (seenCursors.has(nextCursor) || nextCursor === cursor) throw new InventoryError("INVENTORY_CURSOR_CYCLE", `Project ${project.id} returned a repeated conversation cursor.`);
+      if (seenCursors.has(nextCursor) || nextCursor === cursor) throw new InventoryError("INVENTORY_CURSOR_CYCLE", `Project ${project.projectId} returned a repeated conversation cursor.`);
       seenCursors.add(nextCursor);
       cursor = nextCursor;
     }
-    throw new InventoryError("INVENTORY_PAGE_LIMIT", `Project ${project.id} hit the configured conversation page limit.`);
+    throw new InventoryError("INVENTORY_PAGE_LIMIT", `Project ${project.projectId} hit the configured conversation page limit.`);
   }
 
   private async captureShared(): Promise<void> {
@@ -422,12 +427,38 @@ function optionalCursor(value: JsonValue | undefined, name: string): string | nu
   return value;
 }
 
-function parseProject(value: JsonObject, index: number): { id: string; name: string | null } {
+function parseProject(value: JsonObject, index: number): Omit<InventoryProject, "rawHash"> {
   const first = isJsonObject(value.gizmo) ? value.gizmo : value;
   const project = isJsonObject(first.gizmo) ? first.gizmo : first;
-  const id = requiredId(project, `project page item ${index}`);
+  const projectId = requiredId(project, `project page item ${index}`);
   const display = isJsonObject(project.display) ? project.display : undefined;
-  return { id, name: optionalText(display?.name) ?? optionalText(project.name) };
+  const rawFiles = Array.isArray(first.files) ? first.files : Array.isArray(project.files) ? project.files : [];
+  const files = rawFiles.flatMap((candidate, fileIndex): InventoryProjectFile[] => {
+    if (!isJsonObject(candidate)) return [];
+    const providerId = optionalId(candidate.file_id) ?? optionalId(candidate.id);
+    if (providerId === null) return [];
+    return [{
+      logicalId: `project-${projectId}-file-${providerId}-${fileIndex}`,
+      providerId,
+      originalName: optionalText(candidate.name) ?? optionalText(candidate.filename),
+      mediaType: optionalText(candidate.type) ?? optionalText(candidate.mime_type),
+      byteSize: nonNegativeNumber(candidate.size),
+      rawDescriptor: candidate,
+    }];
+  });
+  return {
+    projectId,
+    name: optionalText(display?.name) ?? optionalText(project.name),
+    description: optionalText(display?.description) ?? optionalText(project.description),
+    instructions: optionalText(project.instructions),
+    createTime: optionalNumber(project.created_at) ?? optionalNumber(project.create_time),
+    updateTime: optionalNumber(project.updated_at) ?? optionalNumber(project.update_time),
+    files,
+  };
+}
+
+function nonNegativeNumber(value: JsonValue | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 async function hashIds(ids: string[]): Promise<string> {

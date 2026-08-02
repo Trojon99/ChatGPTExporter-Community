@@ -27,6 +27,26 @@ export interface InventoryConversation {
   listingRecords?: JsonObject[];
 }
 
+export interface InventoryProjectFile {
+  logicalId: string;
+  providerId: string;
+  originalName: string | null;
+  mediaType: string | null;
+  byteSize: number | null;
+  rawDescriptor: JsonValue;
+}
+
+export interface InventoryProject {
+  projectId: string;
+  name: string | null;
+  description: string | null;
+  instructions: string | null;
+  createTime: number | null;
+  updateTime: number | null;
+  rawHash: string;
+  files: InventoryProjectFile[];
+}
+
 export interface InventoryPageRecord {
   scope: ConversationScope;
   chainId: string;
@@ -65,6 +85,7 @@ export interface ConversationInventory {
   complete: boolean;
   chains: InventoryChain[];
   pages: InventoryPageRecord[];
+  projects?: InventoryProject[];
   conversations: InventoryConversation[];
 }
 
@@ -195,6 +216,13 @@ export interface AssetRecord {
 export interface ConversationAssetIndex {
   schemaVersion: 1;
   conversationId: string;
+  status: "complete" | "partial" | "not_requested";
+  assets: AssetRecord[];
+}
+
+export interface ProjectAssetIndex {
+  schemaVersion: 1;
+  projectId: string;
   status: "complete" | "partial" | "not_requested";
   assets: AssetRecord[];
 }
