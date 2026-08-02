@@ -10,7 +10,7 @@ ChatGPTExporter separates provider access from local archive authority. A normal
 4. Signed file URLs remain in page-world asset sessions. Other extension contexts receive only an opaque handle and bounded base64 byte chunks.
 5. The dashboard receives sanitized JSON/bytes and writes through the File System Access API. Directory handles are stored in extension-origin IndexedDB; provider credentials are never stored.
 
-The public extension manifest requests `storage`, `tabs`, `unlimitedStorage`, and `https://chatgpt.com/*`. It has no Grok, arbitrary-site, cookie, downloads, or native-messaging permission.
+The public extension manifest requests no named browser permissions and only the `https://chatgpt.com/*` host permission. Matching-tab discovery is covered by that exact host grant; directory handles use extension-origin IndexedDB and archive bytes use the separately user-granted filesystem. It has no Grok, arbitrary-site, cookie, downloads, storage, tabs, or native-messaging permission.
 
 ## Capture sequence
 

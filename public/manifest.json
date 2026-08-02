@@ -3,7 +3,7 @@
   "name": "ChatGPTExporter",
   "version": "0.0.0",
   "description": "Complete, resumable, privacy-first local exports of your ChatGPT conversation history.",
-  "permissions": ["storage", "tabs", "unlimitedStorage"],
+  "permissions": [],
   "host_permissions": ["https://chatgpt.com/*"],
   "background": {
     "service_worker": "service-worker.js"
