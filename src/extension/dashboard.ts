@@ -85,19 +85,27 @@ async function chooseDirectory(): Promise<void> {
     return;
   }
   try {
+    if (directoryHandle && await ensureDirectoryPermission(directoryHandle, true)) {
+      enableSelectedDirectory(directoryHandle);
+      return;
+    }
     const selectedHandle = await window.showDirectoryPicker({ id: "chatgpt-exporter-parent", mode: "readwrite" });
     directoryHandle = selectedHandle;
     await saveDirectoryHandle(selectedHandle);
-    directoryLabel.textContent = selectedHandle.name;
-    inventoryButton.disabled = false;
-    captureButton.disabled = true;
-    confirmInventoryButton.disabled = true;
-    revalidateButton.disabled = true;
-    inventoryConfirmed = false;
-    setStatus(`${verifiedWorkspaces.length} workspace${verifiedWorkspaces.length === 1 ? " is" : "s are"} ready for isolated inventory directories.`, "ready");
+    enableSelectedDirectory(selectedHandle);
   } catch (error) {
     if (!(error instanceof DOMException && error.name === "AbortError")) showError(error);
   }
+}
+
+function enableSelectedDirectory(handle: FileSystemDirectoryHandle): void {
+  directoryLabel.textContent = handle.name;
+  inventoryButton.disabled = false;
+  captureButton.disabled = true;
+  confirmInventoryButton.disabled = true;
+  revalidateButton.disabled = true;
+  inventoryConfirmed = false;
+  setStatus(`${verifiedWorkspaces.length} workspace${verifiedWorkspaces.length === 1 ? " is" : "s are"} ready for isolated inventory directories.`, "ready");
 }
 
 async function findTabAndWorkspaces(): Promise<void> {
