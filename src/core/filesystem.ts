@@ -7,6 +7,9 @@ export interface ArchiveFileSystem {
   readText(path: string): Promise<string | undefined>;
   readBytes(path: string): Promise<Uint8Array | undefined>;
   exists(path: string): Promise<boolean>;
+  writeByteChunksAtomic(path: string, chunks: AsyncIterable<Uint8Array>): Promise<void>;
+  readByteChunks(path: string, chunkSize?: number): AsyncIterable<Uint8Array>;
+  remove(path: string): Promise<void>;
 }
 
 export class DirectoryArchiveFileSystem implements ArchiveFileSystem {
@@ -17,18 +20,36 @@ export class DirectoryArchiveFileSystem implements ArchiveFileSystem {
   }
 
   async writeBytesAtomic(path: string, content: Uint8Array): Promise<void> {
+    await this.writeByteChunksAtomic(path, oneChunk(content));
+  }
+
+  async writeByteChunksAtomic(path: string, chunks: AsyncIterable<Uint8Array>): Promise<void> {
     const { directory, name } = await this.resolveParent(path, true);
     const handle = await directory.getFileHandle(name, { create: true });
     const writable = await handle.createWritable({ keepExistingData: false });
     try {
-      const copy = new Uint8Array(content.byteLength);
-      copy.set(content);
-      await writable.write(copy);
+      for await (const chunk of chunks) {
+        const copy = new Uint8Array(chunk.byteLength);
+        copy.set(chunk);
+        await writable.write(copy);
+      }
       await writable.close();
     } catch (error) {
       await writable.abort().catch(() => undefined);
       throw error;
     }
+  }
+
+  async *readByteChunks(path: string, chunkSize = 1_048_576): AsyncIterable<Uint8Array> {
+    if (!Number.isInteger(chunkSize) || chunkSize < 1) throw new Error("chunkSize must be positive");
+    const { directory, name } = await this.resolveParent(path, false);
+    const file = await (await directory.getFileHandle(name)).getFile();
+    for (let offset = 0; offset < file.size; offset += chunkSize) yield new Uint8Array(await file.slice(offset, offset + chunkSize).arrayBuffer());
+  }
+
+  async remove(path: string): Promise<void> {
+    const { directory, name } = await this.resolveParent(path, false);
+    await directory.removeEntry(name);
   }
 
   async readText(path: string): Promise<string | undefined> {
@@ -72,6 +93,32 @@ export class MemoryArchiveFileSystem implements ArchiveFileSystem {
     assertSafeRelativePath(path);
     this.files.set(path, new Uint8Array(content));
   }
+  async writeByteChunksAtomic(path: string, chunks: AsyncIterable<Uint8Array>): Promise<void> {
+    assertSafeRelativePath(path);
+    const values: Uint8Array[] = [];
+    let length = 0;
+    for await (const chunk of chunks) {
+      const copy = new Uint8Array(chunk);
+      values.push(copy);
+      length += copy.byteLength;
+    }
+    const output = new Uint8Array(length);
+    let offset = 0;
+    for (const value of values) {
+      output.set(value, offset);
+      offset += value.byteLength;
+    }
+    this.files.set(path, output);
+  }
+  async *readByteChunks(path: string, chunkSize = 1_048_576): AsyncIterable<Uint8Array> {
+    const value = await this.readBytes(path);
+    if (value === undefined) throw new DOMException("File not found", "NotFoundError");
+    for (let offset = 0; offset < value.byteLength; offset += chunkSize) yield value.slice(offset, offset + chunkSize);
+  }
+  async remove(path: string): Promise<void> {
+    assertSafeRelativePath(path);
+    this.files.delete(path);
+  }
   async readText(path: string): Promise<string | undefined> {
     const bytes = await this.readBytes(path);
     return bytes === undefined ? undefined : new TextDecoder().decode(bytes);
@@ -88,4 +135,8 @@ export class MemoryArchiveFileSystem implements ArchiveFileSystem {
   paths(): string[] {
     return [...this.files.keys()].sort();
   }
+}
+
+async function* oneChunk(content: Uint8Array): AsyncIterable<Uint8Array> {
+  yield content;
 }
