@@ -1,6 +1,6 @@
 import { ChatGptClient, type DiscoveredWorkspace } from "../chatgpt/client";
 import { DirectoryArchiveFileSystem } from "../core/filesystem";
-import { ChatGptInventoryEngine, DEFAULT_INVENTORY_SETTINGS } from "../chatgpt/inventory";
+import { DEFAULT_INVENTORY_SETTINGS, runWorkspaceInventories } from "../chatgpt/inventory";
 import { ensureDirectoryPermission, loadDirectoryHandle, saveDirectoryHandle } from "./handle-store";
 import { BridgeResponseError, RuntimeApiTransport, type FindTabResult } from "./protocol";
 
@@ -21,7 +21,7 @@ let directoryHandle: FileSystemDirectoryHandle | undefined;
 let client: ChatGptClient | undefined;
 let runtimeTransport: RuntimeApiTransport | undefined;
 let workspaces: DiscoveredWorkspace[] = [];
-let verifiedWorkspace: DiscoveredWorkspace | undefined;
+let verifiedWorkspaces: DiscoveredWorkspace[] = [];
 
 chooseButton.addEventListener("click", () => void chooseDirectory());
 openButton.addEventListener("click", () => void chrome.tabs.create({ url: "https://chatgpt.com/" }));
@@ -29,11 +29,11 @@ findButton.addEventListener("click", () => void findTabAndWorkspaces());
 preflightButton.addEventListener("click", () => void preflightWorkspace());
 inventoryButton.addEventListener("click", () => void runInventory());
 workspaceSelect.addEventListener("change", () => {
-  verifiedWorkspace = undefined;
+  verifiedWorkspaces = [];
   chooseButton.disabled = true;
   inventoryButton.disabled = true;
-  preflightButton.disabled = workspaceSelect.value === "";
-  directoryLabel.textContent = workspaceSelect.value ? "Verify this workspace first" : "Select a workspace first";
+  preflightButton.disabled = workspaceSelect.selectedOptions.length === 0;
+  directoryLabel.textContent = workspaceSelect.selectedOptions.length ? "Verify selected workspaces first" : "Select one or more workspaces first";
 });
 void restoreDirectory();
 
@@ -42,17 +42,17 @@ async function restoreDirectory(): Promise<void> {
 }
 
 async function chooseDirectory(): Promise<void> {
-  if (!verifiedWorkspace) {
-    setStatus("Verify a workspace before choosing its archive directory.", "error");
+  if (verifiedWorkspaces.length === 0) {
+    setStatus("Verify one or more workspaces before choosing their parent archive directory.", "error");
     return;
   }
   try {
-    const selectedHandle = await window.showDirectoryPicker({ id: `chatgpt-exporter-${verifiedWorkspace.workspaceFingerprint}`, mode: "readwrite" });
+    const selectedHandle = await window.showDirectoryPicker({ id: "chatgpt-exporter-parent", mode: "readwrite" });
     directoryHandle = selectedHandle;
     await saveDirectoryHandle(selectedHandle);
     directoryLabel.textContent = selectedHandle.name;
     inventoryButton.disabled = false;
-    setStatus("Workspace and archive directory are ready for inventory.", "ready");
+    setStatus(`${verifiedWorkspaces.length} workspace${verifiedWorkspaces.length === 1 ? " is" : "s are"} ready for isolated inventory directories.`, "ready");
   } catch (error) {
     if (!(error instanceof DOMException && error.name === "AbortError")) showError(error);
   }
@@ -80,28 +80,34 @@ async function findTabAndWorkspaces(): Promise<void> {
 }
 
 async function preflightWorkspace(): Promise<void> {
-  const workspace = workspaces.find((candidate) => candidate.workspaceFingerprint === workspaceSelect.value);
-  if (!client || !workspace) {
-    setStatus("Choose an accessible workspace first.", "error");
+  const selectedFingerprints = new Set([...workspaceSelect.selectedOptions].map((item) => item.value));
+  const selected = workspaces.filter((candidate) => selectedFingerprints.has(candidate.workspaceFingerprint));
+  if (!client || selected.length === 0) {
+    setStatus("Choose one or more accessible workspaces first.", "error");
     return;
   }
   setBusy(preflightButton, true);
   setStatus("Verifying session, workspace access, and conversation listing…", "busy");
   try {
-    const result = await client.preflight(workspace);
-    verifiedWorkspace = result.workspace;
+    const verified: DiscoveredWorkspace[] = [];
+    let emptyCount = 0;
+    for (const workspace of selected) {
+      const result = await client.preflight(workspace);
+      verified.push(result.workspace);
+      if (result.recognizedEmptyAccount) emptyCount += 1;
+    }
+    verifiedWorkspaces = verified;
     chooseButton.disabled = false;
     inventoryButton.disabled = true;
-    const conversationState = result.recognizedEmptyAccount ? "a recognized empty conversation history" : "an accessible conversation sample";
-    setStatus(`Workspace verified with ${conversationState}. Choose its archive directory.`, "ready");
+    setStatus(`Verified ${verified.length} selected workspace${verified.length === 1 ? "" : "s"}${emptyCount ? ` (${emptyCount} empty)` : ""}. Choose their parent archive directory.`, "ready");
     if (directoryHandle && await ensureDirectoryPermission(directoryHandle, false)) {
       directoryLabel.textContent = `${directoryHandle.name} (previous selection; choose again to confirm for this workspace)`;
     } else {
       directoryLabel.textContent = "No directory selected for this workspace";
     }
-    log.textContent = `Preflight passed for workspace ${workspace.workspaceFingerprint.slice(0, 12)}…. No access token or raw account identifier crossed into this dashboard.`;
+    log.textContent = `Preflight passed for ${verified.length} workspace fingerprint${verified.length === 1 ? "" : "s"}. Each archive will use ChatGPTExport-<fingerprint>; no raw account identifier is written.`;
   } catch (error) {
-    verifiedWorkspace = undefined;
+    verifiedWorkspaces = [];
     chooseButton.disabled = true;
     inventoryButton.disabled = true;
     if (error instanceof BridgeResponseError && error.code === "AUTHENTICATION_REQUIRED") {
@@ -130,7 +136,7 @@ function resetWorkspaceSelection(): void {
   workspaces = [];
   client = undefined;
   runtimeTransport = undefined;
-  verifiedWorkspace = undefined;
+  verifiedWorkspaces = [];
   workspaceSelect.replaceChildren(option("", "Checking ChatGPT…"));
   workspaceSelect.disabled = true;
   preflightButton.disabled = true;
@@ -140,8 +146,8 @@ function resetWorkspaceSelection(): void {
 }
 
 async function runInventory(): Promise<void> {
-  if (!verifiedWorkspace || !directoryHandle || !runtimeTransport) {
-    setStatus("Verify a workspace and choose its archive directory first.", "error");
+  if (verifiedWorkspaces.length === 0 || !directoryHandle || !runtimeTransport) {
+    setStatus("Verify selected workspaces and choose their parent archive directory first.", "error");
     return;
   }
   if (!await ensureDirectoryPermission(directoryHandle, true)) {
@@ -154,23 +160,27 @@ async function runInventory(): Promise<void> {
   preflightButton.disabled = true;
   setStatus("Building complete inventory; conversation bodies are not being downloaded yet…", "busy");
   try {
-    const engine = new ChatGptInventoryEngine({
+    const targets = await Promise.all(verifiedWorkspaces.map(async (workspace) => ({
+      workspace,
+      filesystem: new DirectoryArchiveFileSystem(await directoryHandle!.getDirectoryHandle(`ChatGPTExport-${workspace.workspaceFingerprint}`, { create: true })),
+    })));
+    const inventories = await runWorkspaceInventories({
       transport: runtimeTransport,
-      filesystem: new DirectoryArchiveFileSystem(directoryHandle),
-      workspace: verifiedWorkspace,
+      targets,
       settings: {
         ...DEFAULT_INVENTORY_SETTINGS,
         includeArchived: archivedScope.checked,
         includeProjects: projectScope.checked,
         includeShared: sharedScope.checked,
       },
-      onProgress: (progress) => {
-        setStatus(`Inventorying ${progress.chainId}, page ${progress.pageNumber}; ${progress.uniqueConversations} unique conversations found…`, "busy");
+      onProgress: (workspaceFingerprint, progress) => {
+        setStatus(`Inventorying ${workspaceFingerprint.slice(0, 8)}… / ${progress.chainId}, page ${progress.pageNumber}; ${progress.uniqueConversations} unique conversations found…`, "busy");
       },
     });
-    const inventory = await engine.run();
-    setStatus(`Inventory complete: ${inventory.conversations.length} unique conversations across ${inventory.chains.length} terminal chains.`, "ready");
-    log.textContent = `Published inventory.json and reports/reconciliation.json after ${inventory.pages.length} raw page artifacts were written. Body capture remains disabled until the capture engine is implemented.`;
+    const conversationCount = [...inventories.values()].reduce((sum, inventory) => sum + inventory.conversations.length, 0);
+    const pageCount = [...inventories.values()].reduce((sum, inventory) => sum + inventory.pages.length, 0);
+    setStatus(`Inventory complete: ${conversationCount} workspace-scoped conversations across ${inventories.size} isolated archives.`, "ready");
+    log.textContent = `Published each inventory and reconciliation report after ${pageCount} raw page artifacts were written. Body capture remains disabled until the capture engine is implemented.`;
   } catch (error) {
     showError(error);
   } finally {

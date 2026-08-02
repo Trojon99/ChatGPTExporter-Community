@@ -37,19 +37,19 @@
         </div>
         <div class="workspace-controls">
           <label for="workspace-select">Accessible workspace</label>
-          <select id="workspace-select" disabled>
+          <select id="workspace-select" multiple size="4" disabled>
             <option value="">Find ChatGPT first</option>
           </select>
-          <button id="preflight-workspace" type="button" disabled>Verify workspace</button>
+          <button id="preflight-workspace" type="button" disabled>Verify selected workspaces</button>
         </div>
       </section>
 
       <section class="panel destination">
         <div>
           <h2>3. Choose archive directory</h2>
-          <p id="directory-label">Verify a workspace first</p>
+          <p id="directory-label">Verify selected workspaces first</p>
         </div>
-        <button id="choose-directory" type="button" disabled>Choose directory</button>
+        <button id="choose-directory" type="button" disabled>Choose parent directory</button>
       </section>
 
       <section class="panel inventory-panel">

@@ -334,6 +334,34 @@ export class ChatGptInventoryEngine {
   }
 }
 
+export async function runWorkspaceInventories(options: {
+  transport: ChatGptTransport;
+  targets: Array<{ workspace: DiscoveredWorkspace; filesystem: ArchiveFileSystem }>;
+  settings: InventorySettings;
+  now?: () => Date;
+  onProgress?: (workspaceFingerprint: string, progress: InventoryProgress) => void;
+}): Promise<Map<string, ConversationInventory>> {
+  if (options.targets.length === 0) throw new InventoryError("NO_WORKSPACES_SELECTED", "At least one workspace must be selected.");
+  const fingerprints = options.targets.map((target) => target.workspace.workspaceFingerprint);
+  if (new Set(fingerprints).size !== fingerprints.length) throw new InventoryError("DUPLICATE_WORKSPACE", "Each workspace may be inventoried only once per run.");
+  const results = new Map<string, ConversationInventory>();
+  for (const target of options.targets) {
+    if (target.workspace.deactivated) throw new InventoryError("WORKSPACE_DEACTIVATED", "A selected workspace is deactivated.");
+    const inventory = await new ChatGptInventoryEngine({
+      transport: options.transport,
+      filesystem: target.filesystem,
+      workspace: target.workspace,
+      settings: options.settings,
+      ...(options.now === undefined ? {} : { now: options.now }),
+      ...(options.onProgress === undefined ? {} : {
+        onProgress: (progress) => options.onProgress?.(target.workspace.workspaceFingerprint, progress),
+      }),
+    }).run();
+    results.set(target.workspace.workspaceFingerprint, inventory);
+  }
+  return results;
+}
+
 export class InventoryError extends Error {
   constructor(readonly code: string, message: string) {
     super(message);

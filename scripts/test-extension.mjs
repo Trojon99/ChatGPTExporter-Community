@@ -165,7 +165,7 @@ try {
   await dashboard.locator("#workspace-select").selectOption({ index: 1 });
   await dashboard.locator("#preflight-workspace").click();
   await dashboard.locator("#choose-directory:not([disabled])").waitFor();
-  assert((await dashboard.locator("#status").textContent())?.includes("Workspace verified"), "Dashboard preflight did not reach the verified state.");
+  assert((await dashboard.locator("#status").textContent())?.includes("Verified 1 selected workspace"), "Dashboard preflight did not reach the verified state.");
   console.log("Chromium page-local authentication and allowlisted bridge test passed.");
 } finally {
   await context?.close();

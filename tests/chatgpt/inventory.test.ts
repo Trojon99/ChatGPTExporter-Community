@@ -4,7 +4,7 @@ import { MemoryArchiveFileSystem } from "../../src/core/filesystem";
 import type { JsonValue } from "../../src/core/types";
 import type { ChatGptTransport, DiscoveredWorkspace } from "../../src/chatgpt/client";
 import type { ChatGptOperationParameters } from "../../src/chatgpt/endpoints";
-import { ChatGptInventoryEngine, DEFAULT_INVENTORY_SETTINGS, InventoryError } from "../../src/chatgpt/inventory";
+import { ChatGptInventoryEngine, DEFAULT_INVENTORY_SETTINGS, InventoryError, runWorkspaceInventories } from "../../src/chatgpt/inventory";
 import { BRIDGE_PROTOCOL_VERSION, type ApiSuccessResponse } from "../../src/extension/protocol";
 
 const workspace: DiscoveredWorkspace = {
@@ -139,6 +139,29 @@ describe("ChatGPT complete inventory", () => {
     await expect(engine.run()).rejects.toBeInstanceOf(InventoryError);
     expect(filesystem.paths().some((path) => path.startsWith("source/inventory/main/"))).toBe(true);
     expect(await filesystem.exists("inventory.json")).toBe(false);
+  });
+
+  it("inventories multiple selected workspaces into isolated filesystems and collision-safe logical keys", async () => {
+    const first = new MemoryArchiveFileSystem();
+    const second = new MemoryArchiveFileSystem();
+    const secondWorkspace = { ...workspace, accountId: "account-2", workspaceFingerprint: "b".repeat(32), label: "Second" };
+    const transport = scriptedTransport((operation) => {
+      if (operation.operation !== "conversation_page") throw new Error("unexpected operation");
+      return page([{ id: "same-conversation-id", title: "Synthetic", create_time: 1, update_time: 2 }], 1, 0);
+    });
+    const results = await runWorkspaceInventories({
+      transport,
+      targets: [
+        { workspace, filesystem: first },
+        { workspace: secondWorkspace, filesystem: second },
+      ],
+      settings: { ...DEFAULT_INVENTORY_SETTINGS, includeArchived: false, includeProjects: false, includeShared: false },
+    });
+    expect(results).toHaveLength(2);
+    const keys = [...results.values()].map((inventory) => inventory.conversations[0]?.logicalKey);
+    expect(new Set(keys).size).toBe(2);
+    expect(await first.exists("inventory.json")).toBe(true);
+    expect(await second.exists("inventory.json")).toBe(true);
   });
 });
 
