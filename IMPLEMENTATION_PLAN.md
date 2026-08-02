@@ -723,9 +723,9 @@ Agents must update the progress journal, decision log, and lessons after each me
 #### Phase CG-D — capture, normalization, and assets
 
 - [x] Implement batch conversation retrieval with missing-ID detection and detail fallback.
-- [ ] Implement append-preserving raw revisions, journal transitions, completion markers, and resume.
-- [ ] Implement graph validation and loss-aware message/content normalization.
-- [ ] Implement deterministic branch-aware Markdown and normalized JSON.
+- [x] Implement append-preserving raw revisions, journal transitions, completion markers, and resume.
+- [x] Implement graph validation and loss-aware message/content normalization.
+- [x] Implement deterministic branch-aware Markdown and normalized JSON.
 - [ ] Implement citation/content-reference, browsing/tool/code, Canvas, deep-research, and unknown-block handling.
 - [ ] Implement upload/generated-media/audio/video/inline asset extraction and safe authenticated downloads.
 - [ ] Implement content hashing, deduplication, signed-URL redaction, asset indexes, and partial-asset reporting.
@@ -864,3 +864,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Share-only inventory records bypass the batch endpoint and use their share ID with the dedicated shared-detail adapter. A single-detail or shared-detail graph that remains invalid fails the capture instead of producing a partial success.
 - Tests cover a complete batch with no extra requests, all four fallback reasons, shared retrieval, and rejection of an invalid recovery response. TypeScript and 29/29 unit tests pass; no live data was accessed.
 - Next: persist batch and detail revisions under each conversation, add durable journal transitions and raw-completion evidence, then make retries resume without trusting partial files.
+
+### 2026-08-01 — Journaled raw capture and deterministic normalization completed
+
+- Commit `7666dba` adds atomic run journals, validated state transitions, content-addressed listing/detail/batch revisions, raw-completion markers, and resume checks that verify identity, listing sets, referenced paths, and byte hashes rather than trusting file presence.
+- Commit `6e305fd` preserves every provider graph node and branch, maps known roles and text/multimodal/code/execution/tool/browsing/citation/reasoning/Canvas shapes, retains all raw message and conversation extensions, emits findings for unknown or unsafe structures, and renders deterministic escaped Markdown with the selected branch first and alternatives separately.
+- Commit `bb72cf2` composes inventory, batch retrieval, persistence, normalization, Markdown, assets placeholder, metadata, final completion markers, state journals, and capture reports. An unchanged repeat performs zero requests; corrupted derived files rebuild from validated raw bytes; changed listing evidence forces a refetch.
+- Commit `d6e1f8c` exposes this workflow in the dashboard across every selected isolated workspace. Capture begins only after complete inventory and reports fetched, rebuilt, unchanged, and failed terminal counts explicitly.
+- Passed TypeScript checking, 39/39 unit tests, privacy scanning over 50 tracked/unignored files, production build, and packaged Chromium acceptance. No live account or private conversation data was accessed.
+- Next: implement complete asset descriptor extraction and bounded authenticated byte transport, then add content-addressed deduplication, safe signed-URL handling, asset indexes, and partial-asset terminal reporting.
