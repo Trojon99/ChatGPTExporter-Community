@@ -118,6 +118,7 @@ export interface NormalizedContentPart {
 
 export interface NormalizedMessage {
   id: string;
+  nodeId: string;
   role: NormalizedRole;
   authorName: string | null;
   parentId: string | null;
@@ -128,9 +129,18 @@ export interface NormalizedMessage {
   modelSlug: string | null;
   status: string | null;
   endTurn: boolean | null;
+  selected: boolean;
   parts: NormalizedContentPart[];
   metadata: JsonValue;
   extensions: { chatgpt: JsonValue };
+}
+
+export interface NormalizedNode {
+  id: string;
+  messageId: string | null;
+  parentId: string | null;
+  childIds: string[];
+  raw: JsonValue;
 }
 
 export interface ValidationFinding {
@@ -154,6 +164,7 @@ export interface NormalizedConversation {
   currentNodeId: string | null;
   rootNodeIds: string[];
   memberships: ScopeMembership[];
+  nodes: NormalizedNode[];
   messages: NormalizedMessage[];
   findings: ValidationFinding[];
   extensions: { chatgpt: JsonValue };
