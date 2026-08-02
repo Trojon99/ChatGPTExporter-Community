@@ -24,6 +24,7 @@ export interface InventoryConversation {
   updateTime: number | null;
   memberships: ScopeMembership[];
   listingHashes: string[];
+  listingRecords?: JsonObject[];
 }
 
 export interface InventoryPageRecord {

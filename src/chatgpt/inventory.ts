@@ -278,6 +278,8 @@ export class ChatGptInventoryEngine {
     const existing = this.conversations.get(logicalKey);
     if (existing) {
       if (!existing.listingHashes.includes(listingHash)) existing.listingHashes.push(listingHash);
+      existing.listingRecords ??= [];
+      if (!existing.listingRecords.some((record) => JSON.stringify(record) === JSON.stringify(raw))) existing.listingRecords.push(raw);
       if (!existing.memberships.some((candidate) => membershipKey(candidate) === membershipKey(membership))) existing.memberships.push(membership);
       return;
     }
@@ -289,6 +291,7 @@ export class ChatGptInventoryEngine {
       updateTime: optionalNumber(raw.update_time),
       memberships: [membership],
       listingHashes: [listingHash],
+      listingRecords: [raw],
     });
   }
 
