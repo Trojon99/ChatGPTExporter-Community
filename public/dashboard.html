@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChatGPTExporter</title>
+    <link rel="stylesheet" href="dashboard.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">LOCAL ARCHIVE UTILITY</p>
+          <h1>ChatGPTExporter</h1>
+          <p class="intro">A privacy-first, resumable ChatGPT archive is being built here. This baseline deliberately makes no authenticated API requests.</p>
+        </div>
+        <span class="privacy">LOCAL ONLY</span>
+      </header>
+
+      <section class="panel destination">
+        <div>
+          <h2>1. Choose archive directory</h2>
+          <p id="directory-label">No directory selected</p>
+        </div>
+        <button id="choose-directory" type="button">Choose directory</button>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>2. Find ChatGPT</h2>
+            <p>Keep a signed-in <code>chatgpt.com</code> tab open. Credentials must remain inside that page.</p>
+          </div>
+          <div class="actions">
+            <button id="open-chatgpt" class="secondary" type="button">Open ChatGPT</button>
+            <button id="find-chatgpt" type="button">Find tab</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel run-panel">
+        <p id="status" data-state="idle">No network adapters are enabled in this baseline.</p>
+        <div id="log" aria-live="polite"></div>
+      </section>
+
+      <footer>ChatGPTExporter sends no telemetry and has no backend. Authentication and export behavior remain disabled until their confinement tests pass.</footer>
+    </main>
+    <script src="dashboard.js"></script>
+  </body>
+</html>
