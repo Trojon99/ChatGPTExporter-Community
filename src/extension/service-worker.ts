@@ -33,8 +33,8 @@ async function forwardApiRequest(tabId: unknown, value: unknown): Promise<ApiRes
     request = parseApiRequest(value);
     validateOperation(request);
     if (!Number.isInteger(tabId)) throw new Error("tabId is invalid");
-  } catch {
-    return failureResponse(requestId(value), "INVALID_BRIDGE_REQUEST", "Request failed extension validation.");
+  } catch (error) {
+    return failureResponse(requestId(value), "INVALID_BRIDGE_REQUEST", validationFailureMessage(error));
   }
   try {
     return await chrome.tabs.sendMessage(tabId as number, {
@@ -46,4 +46,10 @@ async function forwardApiRequest(tabId: unknown, value: unknown): Promise<ApiRes
       retryable: true,
     });
   }
+}
+
+function validationFailureMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Request failed extension validation (unknown error).";
+  const reason = error.message.replace(/[^A-Za-z0-9 .,():_-]/g, "?").slice(0, 160);
+  return `Request failed extension validation (${error.name}: ${reason || "no detail"}).`;
 }
