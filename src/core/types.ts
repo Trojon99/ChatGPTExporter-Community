@@ -208,7 +208,7 @@ export interface WorkspaceSelection {
 
 export interface AccountArtifact {
   schemaVersion: 1;
-  kind: "memory" | "custom_instructions" | "settings" | "session_metadata";
+  kind: "memory" | "custom_instructions" | "settings" | "beta_features" | "session_metadata";
   workspaceFingerprint: string;
   capturedAt: string;
   rawHash: string;

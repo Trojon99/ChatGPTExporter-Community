@@ -25,7 +25,7 @@ export type ChatGptOperationParameters =
   | { operation: "shared_detail"; parameters: { shareId: string } }
   | { operation: "conversation_batch"; parameters: { conversationIds: string[] } }
   | { operation: "conversation_detail"; parameters: { conversationId: string } }
-  | { operation: "account_artifact"; parameters: { kind: "memories" | "custom_instructions" } }
+  | { operation: "account_artifact"; parameters: { kind: "memories" | "custom_instructions" | "settings" | "beta_features" } }
   | { operation: "asset_open"; parameters: { fileId: string; conversationId: string | null; projectId: string | null } }
   | { operation: "asset_chunk"; parameters: { handleId: string; offset: number; length: number } }
   | { operation: "asset_close"; parameters: { handleId: string } };
@@ -102,10 +102,15 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
       const conversationId = assertIdentifier(request.parameters.conversationId, "conversationId");
       return endpoint("GET", `/backend-api/conversation/${conversationId}`, true, 100_000_000, request.operation);
     }
-    case "account_artifact":
-      return request.parameters.kind === "memories"
-        ? endpoint("GET", "/backend-api/memories?include_memory_entries=true", true, 20_000_000, request.operation)
-        : endpoint("GET", "/backend-api/user_system_messages", true, 20_000_000, request.operation);
+    case "account_artifact": {
+      const paths = {
+        memories: "/backend-api/memories?include_memory_entries=true",
+        custom_instructions: "/backend-api/user_system_messages",
+        settings: "/backend-api/settings",
+        beta_features: "/backend-api/settings/beta_features",
+      } as const;
+      return endpoint("GET", paths[request.parameters.kind], true, 20_000_000, request.operation);
+    }
     case "asset_open": {
       const fileId = assertIdentifier(request.parameters.fileId, "fileId");
       const conversationId = request.parameters.conversationId === null
@@ -187,10 +192,10 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
       };
     case "account_artifact":
       assertOnlyKeys(parameters, ["kind"]);
-      if (parameters.kind !== "memories" && parameters.kind !== "custom_instructions") {
+      if (!["memories", "custom_instructions", "settings", "beta_features"].includes(String(parameters.kind))) {
         throw new EndpointValidationError("account artifact kind is invalid");
       }
-      return { operation: request.operation, parameters: { kind: parameters.kind } };
+      return { operation: request.operation, parameters: { kind: parameters.kind as "memories" | "custom_instructions" | "settings" | "beta_features" } };
     case "asset_open":
       assertOnlyKeys(parameters, ["fileId", "conversationId", "projectId"]);
       return {

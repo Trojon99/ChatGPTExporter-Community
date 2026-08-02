@@ -115,7 +115,11 @@ function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { r
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
     let body: JsonValue;
     if (operation.operation === "account_artifact") {
-      body = operation.parameters.kind === "memories" ? { memories: [] } : { about_user_message: "Synthetic" };
+      body = operation.parameters.kind === "memories"
+        ? { memories: [] }
+        : operation.parameters.kind === "custom_instructions"
+          ? { about_user_message: "Synthetic" }
+          : {};
     } else if (operation.operation === "conversation_batch") {
       body = [detail as unknown as JsonValue];
     } else {

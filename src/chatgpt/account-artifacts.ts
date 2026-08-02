@@ -11,7 +11,7 @@ export interface AccountArtifactManifest {
   capturedAt: string;
   status: "complete" | "partial";
   artifacts: Array<{
-    kind: "memories" | "custom_instructions" | "session_metadata";
+    kind: "memories" | "custom_instructions" | "settings" | "beta_features" | "session_metadata";
     status: "complete" | "failed";
     hash: string | null;
     currentPath: string | null;
@@ -40,7 +40,7 @@ export class AccountArtifactCapture {
       capturedAt,
     };
     artifacts.push(await this.persist("session_metadata", sessionMetadata, "session-metadata"));
-    for (const kind of ["memories", "custom_instructions"] as const) {
+    for (const kind of ["memories", "custom_instructions", "settings", "beta_features"] as const) {
       try {
         const response = await this.options.transport.request({ operation: "account_artifact", parameters: { kind } }, this.options.workspace.accountId);
         artifacts.push(await this.persist(kind, response.body, kind.replaceAll("_", "-")));

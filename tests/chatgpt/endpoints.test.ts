@@ -35,6 +35,10 @@ describe("ChatGPT endpoint allowlist", () => {
       .toBe("/backend-api/shared_conversations?order=updated&limit=100&offset=100");
     expect(resolveEndpoint({ operation: "account_artifact", parameters: { kind: "memories" } }).path)
       .toBe("/backend-api/memories?include_memory_entries=true");
+    expect(resolveEndpoint({ operation: "account_artifact", parameters: { kind: "settings" } }).path)
+      .toBe("/backend-api/settings");
+    expect(resolveEndpoint({ operation: "account_artifact", parameters: { kind: "beta_features" } }).path)
+      .toBe("/backend-api/settings/beta_features");
     expect(resolveEndpoint({
       operation: "asset_open",
       parameters: { fileId: "file-1", conversationId: "conversation-1", projectId: null },
