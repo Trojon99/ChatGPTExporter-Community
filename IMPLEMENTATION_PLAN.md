@@ -743,13 +743,13 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 #### Phase CG-F — private full-account completion
 
-- [ ] Calibrate against one synthetic live conversation without retaining credentials.
-- [ ] Inventory every selected accessible ChatGPT workspace and review termination evidence.
-- [ ] Download every inventoried conversation and referenced asset with resumable checkpoints.
-- [ ] Resolve live drift through fixtures, small commits, and selective resume.
-- [ ] Reach zero unresolved conversation failures and document any irretrievable asset exceptions.
-- [ ] Run set/hash/graph/asset reconciliation, unchanged-repeat verification, and category-based manual UI sampling.
-- [ ] Import into the unified archive, prove unchanged reimport creates zero versions, and run sanitized search probes.
+- [x] Calibrate against one synthetic live conversation without retaining credentials.
+- [x] Inventory every selected accessible ChatGPT workspace and review termination evidence.
+- [x] Download every inventoried conversation and referenced asset with resumable checkpoints.
+- [x] Resolve live drift through fixtures, small commits, and selective resume.
+- [x] Reach zero unresolved conversation failures and document any irretrievable asset exceptions.
+- [x] Run set/hash/graph/asset reconciliation, unchanged-repeat verification, and category-based manual UI sampling.
+- [x] Import into the unified archive, prove unchanged reimport creates zero versions, and run sanitized search probes.
 - [ ] Commit aggregate-only acceptance evidence and tag the accepted standalone release.
 
 #### Phase CG-G — one shared source tree, separate safe releases
@@ -908,3 +908,15 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Live listing calibration found that conversation pages now encode `create_time` and `update_time` as ISO-8601 strings while conversation details still use numeric epoch seconds. Commit `7b4994e` adds narrow envelope-boundary conversion to epoch seconds and a regression fixture; malformed timestamp strings still fail closed.
 - Passed 69/69 tests across 19 files, TypeScript checking, the tracked-file privacy scan over 71 files, and a production build after the repair. No conversation body, title, identifier, account identifier, credential, signed URL, browser state, or private archive artifact was committed or logged.
 - Next: grant the native browser directory permission for the private parent directory, inventory both verified workspaces across every enabled scope, review aggregate termination counts, and begin resumable body/asset capture.
+
+### 2026-08-02 — Private full-account capture, audit, transfer, and retrieval accepted
+
+- The selected accessible workspace inventory terminated normally after 15 append-preserved listing pages and contained 938 conversations and two projects. The complete capture has 938/938 completion markers, 743 physical content-addressed assets serving 1,402 logical references, zero partial asset references, zero findings, and zero unresolved conversation failures. The independent audit measured 5,041,241,574 total archive bytes and 982,333,972 asset bytes and reached terminal state `complete`.
+- The resumed full run closed at 568 fetched, five rebuilt from preserved raw evidence, 365 unchanged, zero failed, and zero partial asset scopes. The required immediate repeat performed zero fetches and rebuilds, retained all 938 conversations unchanged, and emitted only 938 valid `complete` journal transitions. Background traffic from unrelated restored ChatGPT tabs was observed separately and is not counted as exporter traffic; operation-level evidence proves the exporter issued no repeat fetches.
+- Live drift was repaired narrowly in commits `678d22f`, `2bea460`, `086842c`, and `b712ffc`: compact batch timestamps now accept current ISO strings while missing message timestamps remain nullable, and citation-only file references no longer masquerade as downloadable assets. Version `0.1.6` passes TypeScript, 83/83 tests across 19 files, privacy scanning over 72 tracked/unignored files, production build, and packaged Chromium acceptance.
+- The reusable private UI sampler in commits `b57f5cb` and `e61a651` compares authenticated DOM title/text anchors in memory and emits category counts only. It sampled every present category: calibration, short, long, old, new, branched, project, shared, cited/browsed, tool/code, uploaded-file, generated-image, Canvas, and deep-research. Archived membership was absent from the verified inventory, so it is explicitly unavailable rather than falsely sampled.
+- The audited directory imported locally as 938 candidates and 938 new versions; exact reimport created zero. A private ZIP was snapshotted and transferred to Flywheel as one `web-exports` object, acknowledged twice without retransmission, then imported remotely as 938 candidates and 938 versions; the automated repeat reported 938 candidates, zero new versions, and no index launch.
+- Transfer/import drift exposed four archive-control bugs and produced small regression commits in `agent_session_migration`: `965d736` retains the umbrella web-export provider during selective transfer, `7bec6ff` detaches selective snapshot lineage, `742bc81` accepts collection-valued remote results, and `8dd008e` accepts streamed CASS JSON results while raising the measured ingest service ceiling from 8 GiB to 16 GiB. The suite passes 62/62 tests with warnings as errors after these changes.
+- Before storage cleanup, the newest recovery set verified with SQLite integrity `ok`. Four exact rebuildable staging targets from earlier recovery, native-import, and CASS work were removed, increasing free space from roughly 16 GiB to 38 GiB without deleting blobs, snapshots, backups, portable records, incoming evidence, acknowledgements, or quarantine. The superseded failed selective batch remains recoverably quarantined.
+- Flywheel CASS now reports initialized, healthy, ready, fresh, complete search coverage, zero quarantined conversations, and zero warnings. Sanitized lexical probes for `ChatGPT`, `OpenAI`, `Python`, and `Markdown` returned only `chatgpt-web` hits, and every sampled hit carried logical-conversation and raw provenance.
+- Next: commit this aggregate-only record, tag the accepted standalone `0.1.6` revision, reverify the Grok baseline, and begin Phase CG-G consolidation without changing provider behavior.
