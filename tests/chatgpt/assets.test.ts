@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { MemoryArchiveFileSystem } from "../../src/core/filesystem";
-import type { InventoryConversation, JsonValue } from "../../src/core/types";
+import type { InventoryConversation, InventoryProject, JsonValue } from "../../src/core/types";
 import { ChatGptAssetManager, discoverAssets } from "../../src/chatgpt/assets";
 import type { ChatGptTransport, DiscoveredWorkspace } from "../../src/chatgpt/client";
 import type { ChatGptOperationParameters } from "../../src/chatgpt/endpoints";
@@ -66,6 +66,35 @@ describe("ChatGPT asset discovery and content-addressed capture", () => {
     expect(result.status).toBe("partial");
     expect(result.assets.map((asset) => asset.status)).toEqual(["complete", "failed"]);
     expect(result.assets[1]?.failure?.code).toBe("SYNTHETIC_ASSET_FAILURE");
+  });
+
+  it("downloads project-level files with the project-scoped adapter", async () => {
+    const project: InventoryProject = {
+      projectId: "project-1",
+      name: "Synthetic project",
+      description: null,
+      instructions: null,
+      createTime: null,
+      updateTime: null,
+      rawHash: "project-hash",
+      files: [{
+        logicalId: "project-1-file-1",
+        providerId: "file-1",
+        originalName: "brief.txt",
+        mediaType: "text/plain",
+        byteSize: 12,
+        rawDescriptor: { file_id: "file-1", name: "brief.txt" },
+      }],
+    };
+    const filesystem = new MemoryArchiveFileSystem();
+    const transport = assetTransport(new TextEncoder().encode("project file"));
+    const result = await new ChatGptAssetManager({ transport, filesystem, workspace }).captureProject(project);
+    expect(result.status).toBe("complete");
+    expect(result.assets[0]).toMatchObject({ providerId: "file-1", kind: "upload", status: "complete" });
+    expect(transport.request.mock.calls.find(([operation]) => operation.operation === "asset_open")?.[0]).toEqual({
+      operation: "asset_open",
+      parameters: { fileId: "file-1", conversationId: null, projectId: "project-1" },
+    });
   });
 });
 

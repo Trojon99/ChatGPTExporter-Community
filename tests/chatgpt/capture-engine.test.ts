@@ -84,9 +84,24 @@ describe("journaled ChatGPT capture engine", () => {
     expect(await filesystem.readText("conversations/conversation-1/conversation.md")).toContain("../../assets/");
     expect(await filesystem.readText("indexes/assets.jsonl")).toContain('"status":"complete"');
   });
+
+  it("captures project-level files and skips them after validating their completion marker", async () => {
+    const filesystem = await fixtureFilesystem(true);
+    const firstTransport = fixtureTransport();
+    const first = await new ChatGptCaptureEngine({ transport: firstTransport, filesystem, workspace, runId: "run-projects", now: clock() }).run();
+    expect(first).toMatchObject({ projectAssetCount: 1, partialProjectAssetCount: 0, projectAssetStatus: "complete" });
+    expect(await filesystem.readText("projects/project-1/assets.json")).toContain('"providerId": "project-file-1"');
+    expect(await filesystem.readText("indexes/assets.jsonl")).toContain('"projectId":"project-1"');
+    expect(firstTransport.request.mock.calls.filter(([operation]) => operation.operation === "asset_open")).toHaveLength(1);
+
+    const repeatTransport = fixtureTransport();
+    const repeat = await new ChatGptCaptureEngine({ transport: repeatTransport, filesystem, workspace, runId: "run-projects-repeat", now: clock() }).run();
+    expect(repeat.projectAssetCount).toBe(1);
+    expect(repeatTransport.request).not.toHaveBeenCalled();
+  });
 });
 
-async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
+async function fixtureFilesystem(includeProject = false): Promise<MemoryArchiveFileSystem> {
   const filesystem = new MemoryArchiveFileSystem();
   const inventory: ConversationInventory = {
     schemaVersion: 1,
@@ -96,6 +111,23 @@ async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
     complete: true,
     chains: [{ chainId: "main", scope: "main", complete: true, terminationReason: "declared_total_reached", pageCount: 1, itemCount: 1, uniqueConversationCount: 1 }],
     pages: [],
+    projects: includeProject ? [{
+      projectId: "project-1",
+      name: "Synthetic project",
+      description: null,
+      instructions: "Synthetic instructions",
+      createTime: 1,
+      updateTime: 2,
+      rawHash: "project-raw-hash",
+      files: [{
+        logicalId: "project-project-1-file-project-file-1-0",
+        providerId: "project-file-1",
+        originalName: "project.txt",
+        mediaType: "text/plain",
+        byteSize: 13,
+        rawDescriptor: { file_id: "project-file-1", name: "project.txt" },
+      }],
+    }] : [],
     conversations: [{
       logicalKey: `${workspace.workspaceFingerprint}/conversation-1`,
       conversationId: "conversation-1",
@@ -112,6 +144,8 @@ async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
 }
 
 function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
+  const projectBytes = new TextEncoder().encode("project bytes");
+  const handles = new Set<string>();
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
     let body: JsonValue;
     if (operation.operation === "account_artifact") {
@@ -122,6 +156,23 @@ function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { r
           : {};
     } else if (operation.operation === "conversation_batch") {
       body = [detail as unknown as JsonValue];
+    } else if (operation.operation === "asset_open") {
+      const handleId = crypto.randomUUID();
+      handles.add(handleId);
+      body = { handleId, mediaType: "text/plain", expectedBytes: projectBytes.byteLength, maxChunkBytes: 1_048_576 };
+    } else if (operation.operation === "asset_chunk") {
+      if (!handles.has(operation.parameters.handleId)) throw new Error("unknown synthetic asset handle");
+      const bytes = projectBytes.slice(operation.parameters.offset, operation.parameters.offset + operation.parameters.length);
+      body = {
+        handleId: operation.parameters.handleId,
+        offset: operation.parameters.offset,
+        nextOffset: operation.parameters.offset + bytes.byteLength,
+        byteLength: bytes.byteLength,
+        dataBase64: btoa(String.fromCharCode(...bytes)),
+        eof: operation.parameters.offset + bytes.byteLength >= projectBytes.byteLength,
+      };
+    } else if (operation.operation === "asset_close") {
+      body = { handleId: operation.parameters.handleId, closed: handles.delete(operation.parameters.handleId) };
     } else {
       throw new Error(`unexpected ${operation.operation}`);
     }

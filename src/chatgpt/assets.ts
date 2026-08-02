@@ -1,7 +1,7 @@
 import type { ArchiveFileSystem } from "../core/filesystem";
 import { extensionFromMediaType, safePathSegment } from "../core/paths";
 import { IncrementalSha256 } from "../core/sha256-stream";
-import type { AssetRecord, ConversationAssetIndex, InventoryConversation, JsonValue, SafeFailure } from "../core/types";
+import type { AssetRecord, ConversationAssetIndex, InventoryConversation, InventoryProject, JsonValue, ProjectAssetIndex, SafeFailure } from "../core/types";
 import { decodeBase64, MAX_ASSET_CHUNK_BYTES } from "./asset-session";
 import type { ChatGptTransport, DiscoveredWorkspace } from "./client";
 import type { ChatGptConversationDetail } from "./envelopes";
@@ -44,22 +44,54 @@ export class ChatGptAssetManager {
 
   async capture(detail: ChatGptConversationDetail, inventory: InventoryConversation): Promise<ConversationAssetIndex> {
     const descriptors = discoverAssets(detail);
+    const assets = await this.captureDescriptors(descriptors, { conversationId: inventory.conversationId, projectId: null });
+    return {
+      schemaVersion: 1,
+      conversationId: inventory.conversationId,
+      status: assets.some((asset) => asset.status === "failed") ? "partial" : "complete",
+      assets,
+    };
+  }
+
+  async captureProject(project: InventoryProject): Promise<ProjectAssetIndex> {
+    const descriptors: DiscoveredAsset[] = project.files.map((file) => ({
+      logicalId: file.logicalId,
+      providerId: file.providerId,
+      sourceMessageId: null,
+      kind: "upload",
+      originalName: file.originalName,
+      mediaType: file.mediaType,
+      rawDescriptor: redactValue(file.rawDescriptor),
+    }));
+    const assets = await this.captureDescriptors(descriptors, { conversationId: null, projectId: project.projectId });
+    return {
+      schemaVersion: 1,
+      projectId: project.projectId,
+      status: assets.some((asset) => asset.status === "failed") ? "partial" : "complete",
+      assets,
+    };
+  }
+
+  private async captureDescriptors(
+    descriptors: DiscoveredAsset[],
+    context: { conversationId: string | null; projectId: string | null },
+  ): Promise<AssetRecord[]> {
     const assets: AssetRecord[] = [];
-    let conversationBytes = 0;
+    let aggregateBytes = 0;
     for (const descriptor of descriptors) {
       try {
         const cacheKey = descriptor.inlineBytes
           ? null
-          : `${descriptor.providerId ?? ""}\0${inventory.conversationId}`;
+          : `${descriptor.providerId ?? ""}\0${context.conversationId ?? ""}\0${context.projectId ?? ""}`;
         let physical = cacheKey ? this.downloaded.get(cacheKey) : undefined;
         if (!physical) {
           physical = descriptor.inlineBytes
             ? await this.persistChunks(descriptor, oneChunk(descriptor.inlineBytes))
-            : await this.downloadRemote(descriptor, inventory);
+            : await this.downloadRemote(descriptor, context);
           if (cacheKey) this.downloaded.set(cacheKey, physical);
         }
-        conversationBytes += physical.byteSize;
-        if (conversationBytes > this.settings().maxConversationBytes) throw new AssetCaptureError("ASSET_CONVERSATION_LIMIT", "Conversation assets exceeded the configured byte limit.");
+        aggregateBytes += physical.byteSize;
+        if (aggregateBytes > this.settings().maxConversationBytes) throw new AssetCaptureError("ASSET_SCOPE_LIMIT", "Conversation or project assets exceeded the configured byte limit.");
         assets.push({
           logicalId: descriptor.logicalId,
           providerId: descriptor.providerId,
@@ -94,22 +126,17 @@ export class ChatGptAssetManager {
         });
       }
     }
-    return {
-      schemaVersion: 1,
-      conversationId: inventory.conversationId,
-      status: assets.some((asset) => asset.status === "failed") ? "partial" : "complete",
-      assets,
-    };
+    return assets;
   }
 
-  private async downloadRemote(descriptor: DiscoveredAsset, inventory: InventoryConversation) {
+  private async downloadRemote(descriptor: DiscoveredAsset, context: { conversationId: string | null; projectId: string | null }) {
     if (!descriptor.providerId) throw new AssetCaptureError("ASSET_PROVIDER_ID_MISSING", "Asset has no provider file identifier.");
     const response = await this.options.transport.request({
       operation: "asset_open",
       parameters: {
         fileId: descriptor.providerId,
-        conversationId: inventory.conversationId,
-        projectId: null,
+        conversationId: context.conversationId,
+        projectId: context.projectId,
       },
     }, this.options.workspace.accountId, 120_000);
     const opened = requireObject(response.body, "asset open response");
@@ -121,7 +148,11 @@ export class ChatGptAssetManager {
     }
     const mediaType = optionalString(opened.mediaType) ?? descriptor.mediaType;
     try {
-      return await this.persistChunks({ ...descriptor, mediaType }, this.remoteChunks(handleId));
+      const persisted = await this.persistChunks({ ...descriptor, mediaType }, this.remoteChunks(handleId));
+      if (expectedBytes !== null && persisted.byteSize !== expectedBytes) {
+        throw new AssetCaptureError("ASSET_TOTAL_MISMATCH", "Asset byte count did not match the signed download descriptor.");
+      }
+      return persisted;
     } finally {
       await this.close(handleId);
     }

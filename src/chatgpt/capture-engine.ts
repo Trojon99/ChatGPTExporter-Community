@@ -4,7 +4,7 @@ import { sha256Hex } from "../core/hash";
 import { renderConversationMarkdown } from "../core/markdown";
 import { conversationBasePath } from "../core/paths";
 import { parseJson, prettyJson } from "../core/serialization";
-import type { ConversationInventory, InventoryConversation, JsonValue, SafeFailure } from "../core/types";
+import type { ConversationInventory, InventoryConversation, InventoryProject, JsonValue, ProjectAssetIndex, SafeFailure } from "../core/types";
 import { ChatGptDetailFetcher, type RawBatchCapture, type RetrievedConversationDetail } from "./capture";
 import type { ChatGptTransport, DiscoveredWorkspace } from "./client";
 import { parseConversationDetail } from "./envelopes";
@@ -37,7 +37,20 @@ export interface CaptureRunResult {
   skippedCount: number;
   failedCount: number;
   partialAssetCount: number;
+  projectAssetCount: number;
+  partialProjectAssetCount: number;
+  projectAssetStatus: "complete" | "partial" | "not_requested";
   accountArtifactStatus: "complete" | "partial" | "not_requested";
+}
+
+interface ProjectAssetCompletionMarker {
+  schemaVersion: 1;
+  provider: "chatgpt-web";
+  projectId: string;
+  projectRawHash: string;
+  assetsHash: string;
+  status: "complete" | "partial" | "not_requested";
+  completedAt: string;
 }
 
 export interface ConversationCaptureProgress {
@@ -77,6 +90,9 @@ export class ChatGptCaptureEngine {
       skippedCount: 0,
       failedCount: 0,
       partialAssetCount: 0,
+      projectAssetCount: 0,
+      partialProjectAssetCount: 0,
+      projectAssetStatus: this.options.includeAssets === false ? "not_requested" : "complete",
       accountArtifactStatus: "not_requested",
     };
     if (this.options.includeAccountArtifacts !== false) {
@@ -92,6 +108,10 @@ export class ChatGptCaptureEngine {
       filesystem: this.options.filesystem,
       workspace: this.options.workspace,
     });
+    const projectAssetResult = await this.captureProjectAssets(inventory.projects ?? [], assetManager);
+    result.projectAssetCount = projectAssetResult.assetCount;
+    result.partialProjectAssetCount = projectAssetResult.partialProjectCount;
+    result.projectAssetStatus = projectAssetResult.status;
     const needNetwork: InventoryConversation[] = [];
     const rebuild: Array<{ conversation: InventoryConversation; rawMarker: RawCompletionMarker }> = [];
 
@@ -285,8 +305,62 @@ export class ChatGptCaptureEngine {
       const value = parseJson<{ assets?: Array<Record<string, unknown>> }>(await this.options.filesystem.readText(`${conversationBasePath(conversation.conversationId)}/assets.json`));
       for (const asset of value?.assets ?? []) rows.push({ logicalKey: conversation.logicalKey, conversationId: conversation.conversationId, ...asset });
     }
+    for (const project of inventory.projects ?? []) {
+      const value = parseJson<{ assets?: Array<Record<string, unknown>> }>(await this.options.filesystem.readText(`${projectBasePath(project.projectId)}/assets.json`));
+      for (const asset of value?.assets ?? []) rows.push({ logicalKey: `${this.options.workspace.workspaceFingerprint}/project/${project.projectId}`, projectId: project.projectId, ...asset });
+    }
     rows.sort((left, right) => `${left.logicalKey}\0${left.logicalId}`.localeCompare(`${right.logicalKey}\0${right.logicalId}`));
     await this.options.filesystem.writeTextAtomic("indexes/assets.jsonl", rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
+  }
+
+  private async captureProjectAssets(projects: InventoryProject[], assetManager: ChatGptAssetManager): Promise<{
+    status: "complete" | "partial" | "not_requested";
+    assetCount: number;
+    partialProjectCount: number;
+  }> {
+    let assetCount = 0;
+    let partialProjectCount = 0;
+    for (const project of projects) {
+      const base = projectBasePath(project.projectId);
+      const existing = parseJson<ProjectAssetCompletionMarker>(await this.options.filesystem.readText(`${base}/complete.json`));
+      const existingAssets = await this.options.filesystem.readText(`${base}/assets.json`);
+      const expectedStatus = this.options.includeAssets === false ? "not_requested" : "complete";
+      if (existing
+        && existing.schemaVersion === 1
+        && existing.provider === "chatgpt-web"
+        && existing.projectId === project.projectId
+        && existing.projectRawHash === project.rawHash
+        && existing.status === expectedStatus
+        && existingAssets !== undefined
+        && await sha256Hex(existingAssets) === existing.assetsHash) {
+        const parsed = parseJson<ProjectAssetIndex>(existingAssets);
+        assetCount += parsed?.assets.length ?? 0;
+        continue;
+      }
+      const assets: ProjectAssetIndex = this.options.includeAssets === false
+        ? { schemaVersion: 1, projectId: project.projectId, status: "not_requested", assets: [] }
+        : await assetManager.captureProject(project);
+      const assetsText = prettyJson(assets);
+      const marker: ProjectAssetCompletionMarker = {
+        schemaVersion: 1,
+        provider: "chatgpt-web",
+        projectId: project.projectId,
+        projectRawHash: project.rawHash,
+        assetsHash: await sha256Hex(assetsText),
+        status: assets.status,
+        completedAt: this.now().toISOString(),
+      };
+      await this.options.filesystem.writeTextAtomic(`${base}/metadata.json`, prettyJson(project));
+      await this.options.filesystem.writeTextAtomic(`${base}/assets.json`, assetsText);
+      await this.options.filesystem.writeTextAtomic(`${base}/complete.json`, prettyJson(marker));
+      assetCount += assets.assets.length;
+      if (assets.status === "partial") partialProjectCount += 1;
+    }
+    return {
+      status: this.options.includeAssets === false ? "not_requested" : partialProjectCount > 0 ? "partial" : "complete",
+      assetCount,
+      partialProjectCount,
+    };
   }
 
   private progress(phase: ConversationCaptureProgress["phase"], result: CaptureRunResult, conversationId: string): void {
@@ -297,6 +371,11 @@ export class ChatGptCaptureEngine {
       conversationId,
     });
   }
+}
+
+function projectBasePath(projectId: string): string {
+  if (!/^[A-Za-z0-9_-]{1,256}$/.test(projectId)) throw new Error("Project identifier is unsafe for archive paths.");
+  return `projects/${projectId}`;
 }
 
 function mapBatches(batches: RawBatchCapture[]): Map<string, RawBatchCapture> {
