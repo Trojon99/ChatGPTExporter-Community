@@ -11,6 +11,7 @@ describe("streaming archive filesystem", () => {
     expect(read.join("")).toBe("onetwothree");
     await filesystem.writeByteChunksAtomic("assets/final.bin", filesystem.readByteChunks("staging/file.bin", 2));
     expect(new TextDecoder().decode((await filesystem.readBytes("assets/final.bin"))!)).toBe("onetwothree");
+    expect(await filesystem.listPaths("assets")).toEqual(["assets/final.bin"]);
     await filesystem.remove("staging/file.bin");
     expect(await filesystem.exists("staging/file.bin")).toBe(false);
   });

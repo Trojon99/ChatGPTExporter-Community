@@ -9,6 +9,7 @@ export interface ArchiveFileSystem {
   exists(path: string): Promise<boolean>;
   writeByteChunksAtomic(path: string, chunks: AsyncIterable<Uint8Array>): Promise<void>;
   readByteChunks(path: string, chunkSize?: number): AsyncIterable<Uint8Array>;
+  listPaths(prefix?: string): Promise<string[]>;
   remove(path: string): Promise<void>;
 }
 
@@ -52,6 +53,13 @@ export class DirectoryArchiveFileSystem implements ArchiveFileSystem {
     await directory.removeEntry(name);
   }
 
+  async listPaths(prefix = ""): Promise<string[]> {
+    if (prefix) assertSafeRelativePath(prefix);
+    const output: string[] = [];
+    await this.walk(this.root, "", output);
+    return output.filter((path) => !prefix || path === prefix || path.startsWith(`${prefix}/`)).sort();
+  }
+
   async readText(path: string): Promise<string | undefined> {
     const bytes = await this.readBytes(path);
     return bytes === undefined ? undefined : new TextDecoder().decode(bytes);
@@ -80,6 +88,17 @@ export class DirectoryArchiveFileSystem implements ArchiveFileSystem {
     let directory = this.root;
     for (const segment of parts) directory = await directory.getDirectoryHandle(segment, { create });
     return { directory, name };
+  }
+
+  private async walk(directory: FileSystemDirectoryHandle, base: string, output: string[]): Promise<void> {
+    const iterable = directory as FileSystemDirectoryHandle & {
+      entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+    };
+    for await (const [name, handle] of iterable.entries()) {
+      const path = base ? `${base}/${name}` : name;
+      if (handle.kind === "file") output.push(path);
+      else await this.walk(handle as FileSystemDirectoryHandle, path, output);
+    }
   }
 }
 
@@ -118,6 +137,10 @@ export class MemoryArchiveFileSystem implements ArchiveFileSystem {
   async remove(path: string): Promise<void> {
     assertSafeRelativePath(path);
     this.files.delete(path);
+  }
+  async listPaths(prefix = ""): Promise<string[]> {
+    if (prefix) assertSafeRelativePath(prefix);
+    return this.paths().filter((path) => !prefix || path === prefix || path.startsWith(`${prefix}/`));
   }
   async readText(path: string): Promise<string | undefined> {
     const bytes = await this.readBytes(path);
