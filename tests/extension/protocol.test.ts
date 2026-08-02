@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { BRIDGE_PROTOCOL_VERSION, disabledResponse, requestId } from "../../src/extension/protocol";
+import { BRIDGE_PROTOCOL_VERSION, failureResponse, requestId } from "../../src/extension/protocol";
 
 describe("extension protocol", () => {
   it("fails unimplemented authenticated requests closed", () => {
-    expect(disabledResponse("request-1")).toEqual({
+    expect(failureResponse("request-1", "ENDPOINTS_NOT_IMPLEMENTED", "Not implemented.", { correlationId: "correlation-1" })).toEqual({
       requestId: "request-1",
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
       ok: false,
       error: {
-        name: "ChatGPTExporterBaseline",
+        name: "ChatGPTExporterError",
         code: "ENDPOINTS_NOT_IMPLEMENTED",
-        message: "Authenticated endpoint adapters are not implemented in this baseline.",
+        message: "Not implemented.",
         retryable: false,
+        correlationId: "correlation-1",
       },
     });
   });

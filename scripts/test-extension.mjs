@@ -25,7 +25,25 @@ execFileSync("openssl", [
 const server = https.createServer({
   key: await readFile(keyPath),
   cert: await readFile(certificatePath),
-}, (_request, response) => {
+}, (request, response) => {
+  const requestUrl = new URL(request.url ?? "/", "https://chatgpt.com");
+  if (requestUrl.pathname === "/api/auth/session") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ accessToken: "synthetic-page-local-secret", expires: "2099-01-01T00:00:00.000Z" }));
+    return;
+  }
+  if (requestUrl.pathname === "/backend-api/conversations") {
+    const authorized = request.headers.authorization === "Bearer synthetic-page-local-secret"
+      && request.headers["x-authorization"] === "Bearer synthetic-page-local-secret";
+    response.writeHead(authorized ? 200 : 401, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(authorized ? {
+      items: [{ id: "conversation-1", title: "Synthetic", create_time: 1, update_time: 2 }],
+      total: 1,
+      offset: 0,
+      limit: 1,
+    } : { error: "fixture rejected request" }));
+    return;
+  }
   response.writeHead(200, { "Content-Type": "text/html" });
   response.end("<!doctype html><title>Synthetic ChatGPT</title><main>Fixture</main>");
 });
@@ -64,20 +82,50 @@ try {
   const tab = await dashboard.evaluate(async () => chrome.runtime.sendMessage({ type: "CHATGPT_EXPORTER_FIND_TAB" }));
   assert(tab.ok && Number.isInteger(tab.tabId), "Service worker did not discover the synthetic ChatGPT tab.");
 
+  const sessionProbe = await dashboard.evaluate(async ({ tabId }) => chrome.runtime.sendMessage({
+    type: "CHATGPT_EXPORTER_API_REQUEST",
+    tabId,
+    request: {
+      requestId: "session-probe",
+      protocolVersion: 1,
+      workspaceId: null,
+      operation: "session_probe",
+      parameters: {},
+      timeoutMs: 10_000,
+    },
+  }), { tabId: tab.tabId });
+  assert(sessionProbe.ok && sessionProbe.body?.authenticated, `Page-local session probe failed: ${JSON.stringify(sessionProbe)}`);
+  assert(!JSON.stringify(sessionProbe).includes("synthetic-page-local-secret"), "Session token crossed the page-world bridge.");
+
+  const listing = await dashboard.evaluate(async ({ tabId }) => chrome.runtime.sendMessage({
+    type: "CHATGPT_EXPORTER_API_REQUEST",
+    tabId,
+    request: {
+      requestId: "conversation-page",
+      protocolVersion: 1,
+      workspaceId: null,
+      operation: "conversation_page",
+      parameters: { offset: 0, limit: 1, archived: false },
+      timeoutMs: 10_000,
+    },
+  }), { tabId: tab.tabId });
+  assert(listing.ok && listing.body?.items?.[0]?.id === "conversation-1", `Authenticated listing failed: ${JSON.stringify(listing)}`);
+  assert(!JSON.stringify(listing).includes("synthetic-page-local-secret"), "Authorization token crossed the page-world bridge.");
+
   const rejected = await dashboard.evaluate(async ({ tabId }) => chrome.runtime.sendMessage({
     type: "CHATGPT_EXPORTER_API_REQUEST",
     tabId,
     request: {
       requestId: "rejected-request",
       protocolVersion: 1,
-      operation: "unimplemented",
-      path: "https://evil.example/private",
-      method: "GET",
+      workspaceId: null,
+      operation: "conversation_detail",
+      parameters: { conversationId: "../../private", url: "https://evil.example/private" },
       timeoutMs: 10_000,
     },
   }), { tabId: tab.tabId });
-  assert(!rejected.ok && rejected.error?.code === "ENDPOINTS_NOT_IMPLEMENTED", "Baseline transport did not fail closed.");
-  console.log("Chromium no-network extension baseline passed.");
+  assert(!rejected.ok && rejected.error?.code === "INVALID_BRIDGE_REQUEST", "Typed transport did not fail closed.");
+  console.log("Chromium page-local authentication and allowlisted bridge test passed.");
 } finally {
   await context?.close();
   await new Promise((resolve) => server.close(resolve));
