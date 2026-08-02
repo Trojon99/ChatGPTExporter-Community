@@ -40,6 +40,34 @@ describe("ChatGPT batch-first detail retrieval", () => {
     expect(transport.request).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps compact live batches with ISO and omitted timestamps on the batch path", async () => {
+    const compact = conversationDetail() as unknown as {
+      create_time: JsonValue;
+      update_time: JsonValue;
+      mapping: Record<string, Record<string, JsonValue>>;
+    };
+    compact.create_time = "2026-08-01T12:00:00.000Z";
+    compact.update_time = "2026-08-01T12:00:01.000Z";
+    delete compact.mapping["root-1"]!.parent;
+    delete compact.mapping["root-1"]!.message;
+    delete (compact.mapping["user-1"]!.message as Record<string, JsonValue>).create_time;
+    const transport = transportFor((operation) => {
+      if (operation.operation === "conversation_batch") return [compact as unknown as JsonValue];
+      throw new Error(`unexpected ${operation.operation}`);
+    });
+
+    const result = await new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()]);
+
+    expect(result.conversations[0]).toMatchObject({
+      source: "batch",
+      detail: {
+        create_time: 1_785_585_600,
+        mapping: { "user-1": { message: { create_time: null } } },
+      },
+    });
+    expect(transport.request).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back when a compact placeholder is not a detached root", async () => {
     const compactNonRoot = conversationDetail() as unknown as { mapping: Record<string, Record<string, JsonValue>> };
     delete compactNonRoot.mapping["user-1"]!.parent;

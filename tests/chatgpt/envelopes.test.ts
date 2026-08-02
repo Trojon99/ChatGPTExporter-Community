@@ -40,6 +40,32 @@ describe("ChatGPT provider envelopes", () => {
     expect(() => parseConversationDetail(malformed)).toThrow("message must be an object");
   });
 
+  it("normalizes live batch timestamps and omitted message timestamps", () => {
+    const detail = conversationDetail() as unknown as {
+      create_time: unknown;
+      update_time: unknown;
+      mapping: Record<string, { message: Record<string, unknown> | null }>;
+    };
+    detail.create_time = "2026-08-01T12:00:00.000Z";
+    detail.update_time = "2026-08-01T12:00:01.500Z";
+    detail.mapping["user-1"]!.message!.create_time = "2026-08-01T12:00:02.250Z";
+    delete detail.mapping["assistant-1"]!.message!.create_time;
+
+    const parsed = parseConversationDetail(detail);
+    expect(parsed.create_time).toBe(1_785_585_600);
+    expect(parsed.update_time).toBe(1_785_585_601.5);
+    expect(parsed.mapping["user-1"]!.message!.create_time).toBe(1_785_585_602.25);
+    expect(parsed.mapping["assistant-1"]!.message!.create_time).toBeNull();
+  });
+
+  it("rejects malformed detail timestamps", () => {
+    const invalidRoot = { ...conversationDetail(), create_time: "yesterday" };
+    expect(() => parseConversationDetail(invalidRoot)).toThrow("conversation detail.create_time");
+    const detail = conversationDetail() as unknown as { mapping: Record<string, { message: Record<string, unknown> | null }> };
+    detail.mapping["user-1"]!.message!.create_time = "eventually";
+    expect(() => parseConversationDetail(detail)).toThrow("message.create_time");
+  });
+
   it("validates sanitized account metadata", () => {
     expect(parseAccountsEnvelope({
       accounts: {

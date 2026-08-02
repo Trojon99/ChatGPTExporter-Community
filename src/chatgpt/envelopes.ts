@@ -114,8 +114,8 @@ export function parseConversationDetail(value: unknown): ChatGptConversationDeta
     ...(id ? { id } : {}),
     ...(conversationId ? { conversation_id: conversationId } : {}),
     title: nullableString(object.title, "conversation detail.title"),
-    create_time: nullableFiniteNumber(object.create_time, "conversation detail.create_time"),
-    update_time: nullableFiniteNumber(object.update_time, "conversation detail.update_time"),
+    create_time: nullableTimestamp(object.create_time, "conversation detail.create_time"),
+    update_time: nullableTimestamp(object.update_time, "conversation detail.update_time"),
     current_node: nullableString(object.current_node, "conversation detail.current_node"),
     mapping,
   } as ChatGptConversationDetail;
@@ -210,11 +210,17 @@ function parseMessage(value: unknown, nodeId: string): ChatGptMessage {
   const object = requireRecord(value, `mapping node ${nodeId}.message`);
   const author = requireRecord(object.author, `mapping node ${nodeId}.message.author`);
   const content = requireRecord(object.content, `mapping node ${nodeId}.message.content`);
+  const updateTime = object.update_time === undefined
+    ? undefined
+    : nullableTimestamp(object.update_time, `mapping node ${nodeId}.message.update_time`);
   return {
     ...object,
     id: requiredIdentifier(object.id, `mapping node ${nodeId}.message.id`),
     author: { ...author, role: requiredString(author.role, `mapping node ${nodeId}.message.author.role`) },
-    create_time: nullableFiniteNumber(object.create_time, `mapping node ${nodeId}.message.create_time`),
+    create_time: object.create_time === undefined
+      ? null
+      : nullableTimestamp(object.create_time, `mapping node ${nodeId}.message.create_time`),
+    ...(updateTime === undefined ? {} : { update_time: updateTime }),
     content: { ...content, content_type: requiredString(content.content_type, `mapping node ${nodeId}.message.content.content_type`) },
   } as ChatGptMessage;
 }
