@@ -713,12 +713,12 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 #### Phase CG-C — complete inventory
 
-- [ ] Implement main-history pagination with raw page evidence and fail-closed limits.
-- [ ] Implement archived-history pagination and membership merging.
-- [ ] Implement project discovery and every project cursor chain.
-- [ ] Implement shared-conversation inventory and ownership linking.
+- [x] Implement main-history pagination with raw page evidence and fail-closed limits.
+- [x] Implement archived-history pagination and membership merging.
+- [x] Implement project discovery and every project cursor chain.
+- [x] Implement shared-conversation inventory and ownership linking.
 - [ ] Implement multi-workspace inventory, stable workspace fingerprints, and collision-safe logical keys.
-- [ ] Persist inventory before capture and add reconciliation/page-termination reports.
+- [x] Persist inventory before capture and add reconciliation/page-termination reports.
 
 #### Phase CG-D — capture, normalization, and assets
 
@@ -839,3 +839,13 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Passed TypeScript checking, 19/19 unit tests, privacy scanning over 34 tracked/unignored files, production build, and packaged Chromium UI/bridge acceptance. Malicious cases cover arbitrary/localhost/protocol-relative URL fields, destructive methods/bodies, caller-supplied headers, traversal identifiers, unknown fields, oversized pages/batches, and duplicate batch IDs.
 - The browser fixture additionally proves a `429` response preserves `Retry-After` while dropping its private body, and that workspace discovery requires a user-visible explicit selection before preflight. No live account or private conversation data was accessed.
 - Next: implement inventory-first main and archived pagination with append-preserving raw page evidence, fail-closed safety limits, deterministic page hashes, normal termination proof, and reconciliation before adding projects/shared/multi-workspace union behavior.
+
+### 2026-08-01 — Complete per-workspace inventory engine implemented
+
+- Commit `bf31cb2` adapts the proven Grok archive filesystem, safe-path, stable-JSON, byte-count, and SHA-256 primitives with file-level provenance; commit `6464494` implements ChatGPT inventory across main, archived, project index, every project cursor chain, and shared history.
+- Every raw response is content-addressed and atomically written under `source/inventory/` before its IDs enter the union. `inventory.json` and `reports/reconciliation.json` are published only after all enabled chains end through a declared total, cursor exhaustion, recognized empty account, or an empty page where no declared remainder exists.
+- The engine merges main/archived/project/shared memberships and listing hashes under `<workspace-fingerprint>/<conversation-id>`, links shared records through `conversation_id`, retains share-only records, and never writes the raw account ID.
+- Safety failures include premature empty pages, repeated ordered pages, repeated cursors, offset stalls, invalid envelopes/IDs, page limits, and aggregate byte limits. A failed run leaves its raw evidence available but deliberately does not publish `inventory.json`.
+- Commit `bdf4b78` wires the engine into the packaged dashboard. Inventory remains disabled until explicit workspace preflight and directory permission pass; users can include archived, project, and shared scopes, while main history is always required.
+- Passed TypeScript checking, 24/24 unit tests, privacy scanning over 41 tracked/unignored files, production build, and packaged Chromium authentication/preflight acceptance. No live account or private conversation data was accessed.
+- Next: add explicit multi-workspace orchestration and isolated destinations, then begin batch/detail capture with missing-ID and graph-equivalence checks against the durable inventory.
