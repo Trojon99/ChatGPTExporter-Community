@@ -19,3 +19,9 @@ export function assertSafeRelativePath(path: string): void {
   const segments = path.replaceAll("\\", "/").split("/");
   if (segments.some((segment) => !segment || segment === "." || segment === "..")) throw new Error(`Unsafe relative path: ${path}`);
 }
+
+export function conversationBasePath(conversationId: string): string {
+  const path = `conversations/${safePathSegment(conversationId, "missing-id", 160)}`;
+  assertSafeRelativePath(path);
+  return path;
+}
