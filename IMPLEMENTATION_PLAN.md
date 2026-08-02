@@ -734,12 +734,12 @@ Agents must update the progress journal, decision log, and lessons after each me
 #### Phase CG-E — dashboard, integration, and release-quality verification
 
 - [x] Adapt the dashboard for workspace selection, scope status, inventory confirmation, capture progress, and explicit terminal states.
-- [ ] Add deterministic mock transport integration cases for every required scope/content/failure mode.
+- [x] Add deterministic mock transport integration cases for every required scope/content/failure mode.
 - [x] Add packaged Chromium bridge tests and directory-permission/resume acceptance.
 - [x] Add unified-archive directory adapter/compatibility output and idempotent import tests.
-- [ ] Write installation, architecture, web-contract, privacy, troubleshooting, and contribution documentation.
-- [ ] Pass typecheck, all tests, privacy scan, two identical builds, and manual manifest-permission review.
-- [ ] Create and push the public `ChatGPTExporter` repository only after the tracked-tree privacy audit passes.
+- [x] Write installation, architecture, web-contract, privacy, troubleshooting, and contribution documentation.
+- [x] Pass typecheck, all tests, privacy scan, two identical builds, and manual manifest-permission review.
+- [x] Create and push the public `ChatGPTExporter` repository only after the tracked-tree privacy audit passes.
 
 #### Phase CG-F — private full-account completion
 
@@ -891,3 +891,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Commit `400c283` in `/home/travis/Projects/agent_session_migration` adds ChatGPT adapter `1.1.0` for audited ChatGPTExporter directories. It streams `indexes/conversations.jsonl`, verifies contained paths and normalized hashes, preserves graph branches/memberships/citations/provider extensions, registers assets and per-conversation raw provenance, and proves import/version counts `1→0→1` for first, unchanged, and changed content. The dependency-free archive suite passes 59/59 tests with warnings as errors.
 - ChatGPTExporter passes 60/60 tests across 17 files, privacy scanning over 63 tracked/unignored files, TypeScript, production build, and packaged browser acceptance at this milestone. No live account or private conversation data was accessed.
 - Next: complete the explicit mock integration failure/resume matrix, release documentation, reproducible-package checks, and public repository publication, then begin the authenticated private full-account run.
+
+### 2026-08-01 — Standalone release-quality gate completed and public repository published
+
+- Commits `45c2d5b`, `1773bec`, and `a018565` complete the deterministic test matrix: packaged page-world handling covers sanitized `401`, `403`, `429`, `503`, malformed JSON, oversized response, and timeout states; integration tests prove interruption after raw, derived, completion-marker, and content-addressed asset writes; full-scope capture covers multi-page main, archived duplicates, multiple projects including a file-only project, shared/owned links, batch omission fallback, branches, citation/code/unknown/Canvas/browsing/deep-research/inline media, project files, multiple workspace isolation, an empty workspace, audit, and byte-identical unchanged repeat.
+- Commit `927749d` publishes installation, architecture, web-contract, privacy, troubleshooting, and contribution documentation. The Proof skill kept these code-adjacent Markdown files local to the repository rather than creating external document links.
+- Commit `f0b2045` removes inherited `storage`, `tabs`, and `unlimitedStorage` grants after packaged acceptance proved the exact ChatGPT host permission is sufficient. Commit `bbb8b4f` prepares version `0.1.0`.
+- Final gates pass: TypeScript, 68/68 tests across 19 files, privacy scanning over 71 tracked/unignored files, production build, expanded packaged Chromium workflow, full Git object/path audit, and two deterministic ZIPs with SHA-256 `2e9259cafa4d3de142d872564e9e55d9ab15f102ec4c19629858cd3f7df67937`.
+- Created and verified public repository `https://github.com/siraht/ChatGPTExporter`; `main` and `origin/main` matched commit `bbb8b4fe266da5726ca6c9d88953e9412697eaea` before this plan-only follow-up. No live account or private archive data was accessed or published.
+- Phase CG-E is complete. Next: load version `0.1.0` in the user's normal signed-in Chromium profile, calibrate one harmless synthetic live conversation, grant a private parent directory, then complete every CG-F inventory/capture/audit/import acceptance gate before consolidation.
