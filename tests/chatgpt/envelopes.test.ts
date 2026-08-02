@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  EnvelopeError,
+  parseAccountsEnvelope,
+  parseConversationDetail,
+  parseConversationPage,
+  parseSessionEnvelopeInsidePage,
+  toJsonValue,
+} from "../../src/chatgpt/envelopes";
+import { conversationDetail, conversationPage } from "../fixtures/chatgpt";
+
+describe("ChatGPT provider envelopes", () => {
+  it("accepts a synthetic listing page and preserves provider fields", () => {
+    const page = parseConversationPage(conversationPage({ cursor: null }));
+    expect(page.items[0]?.id).toBe("conversation-1");
+    expect(page.cursor).toBeNull();
+  });
+
+  it("rejects listing pages whose pagination evidence is malformed", () => {
+    expect(() => parseConversationPage({ ...conversationPage(), limit: 0 })).toThrow(EnvelopeError);
+    expect(() => parseConversationPage({ ...conversationPage(), total: "1" })).toThrow("conversation page.total");
+  });
+
+  it("accepts a complete graph and rejects mapping key drift", () => {
+    expect(Object.keys(parseConversationDetail(conversationDetail()).mapping)).toHaveLength(3);
+    const detail = conversationDetail();
+    detail.mapping["user-1"] = { ...detail.mapping["user-1"]!, id: "different-node" };
+    expect(() => parseConversationDetail(detail)).toThrow("does not match node id");
+  });
+
+  it("validates sanitized account metadata", () => {
+    expect(parseAccountsEnvelope({
+      accounts: {
+        internal_key: {
+          account: { account_id: "account-1", account_name: "Personal", account_plan: "free" },
+          structure: "personal",
+          is_deactivated: false,
+        },
+      },
+    }).accounts.internal_key?.account.account_id).toBe("account-1");
+  });
+
+  it("parses session secrets only through an explicitly page-local function", () => {
+    expect(parseSessionEnvelopeInsidePage({ accessToken: "synthetic-token", expires: "2099-01-01T00:00:00Z" }).expires)
+      .toBe("2099-01-01T00:00:00Z");
+    expect(() => parseSessionEnvelopeInsidePage({ expires: "2099-01-01T00:00:00Z" })).toThrow("accessToken");
+  });
+
+  it("rejects values that cannot be serialized as JSON evidence", () => {
+    expect(toJsonValue({ nested: [1, true, null] })).toEqual({ nested: [1, true, null] });
+    expect(() => toJsonValue({ secret: undefined })).toThrow("non-JSON type undefined");
+  });
+});
