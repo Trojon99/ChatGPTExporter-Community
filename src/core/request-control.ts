@@ -15,13 +15,18 @@ export class ControlledTransport implements ChatGptTransport {
     private readonly options: {
       delayMs: number;
       maxConcurrency: number;
+      maxRetries?: number;
+      retryBaseDelayMs?: number;
+      retryMaxDelayMs?: number;
       now?: () => number;
       sleep?: (milliseconds: number) => Promise<void>;
+      random?: () => number;
       onState?: (state: RequestControlState, active: number) => void;
     },
   ) {
     if (!Number.isInteger(options.delayMs) || options.delayMs < 0 || options.delayMs > 60_000) throw new Error("Request delay must be between 0 and 60000 milliseconds.");
     if (!Number.isInteger(options.maxConcurrency) || options.maxConcurrency < 1 || options.maxConcurrency > 8) throw new Error("Request concurrency must be between 1 and 8.");
+    if (options.maxRetries !== undefined && (!Number.isInteger(options.maxRetries) || options.maxRetries < 0 || options.maxRetries > 12)) throw new Error("Request retries must be between 0 and 12.");
   }
 
   pause(): void {
@@ -48,15 +53,34 @@ export class ControlledTransport implements ChatGptTransport {
   }
 
   async request(operation: ChatGptOperationParameters, workspaceId: string | null, timeoutMs?: number): Promise<ApiSuccessResponse> {
-    await this.acquire();
-    try {
-      return await this.inner.request(operation, workspaceId, timeoutMs);
-    } finally {
-      this.active -= 1;
-      this.lastRequestFinishedAt = this.now();
-      this.wake();
-      this.notify();
+    const maxRetries = this.options.maxRetries ?? 8;
+    for (let attempt = 0; ; attempt += 1) {
+      await this.acquire();
+      let failure: unknown;
+      try {
+        return await this.inner.request(operation, workspaceId, timeoutMs);
+      } catch (error) {
+        failure = error;
+      } finally {
+        this.active -= 1;
+        this.lastRequestFinishedAt = this.now();
+        this.wake();
+        this.notify();
+      }
+      if (!isRetryable(failure) || attempt >= maxRetries) throw failure;
+      await this.retryDelay(failure, attempt);
     }
+  }
+
+  private async retryDelay(error: unknown, attempt: number): Promise<void> {
+    const baseDelayMs = this.options.retryBaseDelayMs ?? 1_000;
+    const maxDelayMs = this.options.retryMaxDelayMs ?? 60_000;
+    const random = this.options.random ?? Math.random;
+    const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
+    const jittered = Math.max(1, Math.round(exponential * (0.75 + random() * 0.5)));
+    const retryAfterMs = retryAfter(error);
+    await (this.options.sleep ?? defaultSleep)(Math.max(jittered, retryAfterMs));
+    this.throwIfCancelled();
   }
 
   private async acquire(): Promise<void> {
@@ -92,6 +116,16 @@ export class ControlledTransport implements ChatGptTransport {
   private now(): number {
     return (this.options.now ?? Date.now)();
   }
+}
+
+function isRetryable(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "retryable" in error && error.retryable === true);
+}
+
+function retryAfter(error: unknown): number {
+  if (!error || typeof error !== "object" || !("retryAfterMs" in error)) return 0;
+  const value = error.retryAfterMs;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.min(value, 3_600_000) : 0;
 }
 
 export class RequestCancelledError extends Error {
