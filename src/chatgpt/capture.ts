@@ -29,6 +29,8 @@ export interface DetailCaptureResult {
   conversations: RetrievedConversationDetail[];
 }
 
+export type DetailCaptureCheckpoint = (result: DetailCaptureResult) => Promise<void>;
+
 export class ChatGptDetailFetcher {
   constructor(
     private readonly transport: ChatGptTransport,
@@ -38,7 +40,7 @@ export class ChatGptDetailFetcher {
     if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 10) throw new DetailCaptureError("INVALID_BATCH_SIZE", "Batch size must be 1-10.");
   }
 
-  async fetchAll(inventory: InventoryConversation[]): Promise<DetailCaptureResult> {
+  async fetchAll(inventory: InventoryConversation[], checkpoint?: DetailCaptureCheckpoint): Promise<DetailCaptureResult> {
     const output: RetrievedConversationDetail[] = [];
     const batches: RawBatchCapture[] = [];
     const regular = inventory.filter((conversation) => !shareIdFor(conversation));
@@ -49,8 +51,13 @@ export class ChatGptDetailFetcher {
       const result = await this.fetchBatch(group);
       batches.push(result.batch);
       output.push(...result.conversations);
+      await checkpoint?.({ batches: [result.batch], conversations: result.conversations });
     }
-    for (const conversation of shared) output.push(await this.fetchShared(conversation, shareIdFor(conversation)!));
+    for (const conversation of shared) {
+      const retrieved = await this.fetchShared(conversation, shareIdFor(conversation)!);
+      output.push(retrieved);
+      await checkpoint?.({ batches: [], conversations: [retrieved] });
+    }
 
     if (output.length !== inventory.length) {
       throw new DetailCaptureError("DETAIL_COUNT_MISMATCH", `Retrieved ${output.length} details for ${inventory.length} inventory records.`);

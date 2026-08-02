@@ -69,6 +69,24 @@ describe("ChatGPT batch-first detail retrieval", () => {
     });
     await expect(new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()])).rejects.toBeInstanceOf(DetailCaptureError);
   });
+
+  it("checkpoints each completed batch before requesting the next batch", async () => {
+    const transient = Object.assign(new Error("synthetic throttle"), { retryable: true });
+    const transport = transportFor((operation) => {
+      if (operation.operation !== "conversation_batch") throw new Error(`unexpected ${operation.operation}`);
+      const id = operation.parameters.conversationIds[0]!;
+      if (id === "conversation-2") throw transient;
+      return [conversationDetail({ id }) as unknown as JsonValue];
+    });
+    const checkpoints: string[][] = [];
+    const capture = new ChatGptDetailFetcher(transport, workspace, 1).fetchAll(
+      [inventoryItem("conversation-1"), inventoryItem("conversation-2")],
+      async (checkpoint) => { checkpoints.push(checkpoint.conversations.map((item) => item.inventory.conversationId)); },
+    );
+
+    await expect(capture).rejects.toBe(transient);
+    expect(checkpoints).toEqual([["conversation-1"]]);
+  });
 });
 
 function inventoryItem(id = "conversation-1"): InventoryConversation {

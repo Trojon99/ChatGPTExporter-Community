@@ -131,15 +131,16 @@ export class ChatGptCaptureEngine {
     if (needNetwork.length) {
       const completedThisRun = new Set<string>();
       try {
-        const fetched = await new ChatGptDetailFetcher(this.options.transport, this.options.workspace, this.options.batchSize ?? 10).fetchAll(needNetwork);
-        const batchByConversation = mapBatches(fetched.batches);
-        for (const retrieved of fetched.conversations) {
-          const assetStatus = await this.persistAndDerive(store, assetManager, retrieved, batchByConversation.get(retrieved.inventory.conversationId));
-          if (assetStatus === "partial") result.partialAssetCount += 1;
-          result.capturedCount += 1;
-          completedThisRun.add(retrieved.inventory.logicalKey);
-          this.progress("complete", result, retrieved.inventory.conversationId);
-        }
+        await new ChatGptDetailFetcher(this.options.transport, this.options.workspace, this.options.batchSize ?? 10).fetchAll(needNetwork, async (checkpoint) => {
+          const batchByConversation = mapBatches(checkpoint.batches);
+          for (const retrieved of checkpoint.conversations) {
+            const assetStatus = await this.persistAndDerive(store, assetManager, retrieved, batchByConversation.get(retrieved.inventory.conversationId));
+            if (assetStatus === "partial") result.partialAssetCount += 1;
+            result.capturedCount += 1;
+            completedThisRun.add(retrieved.inventory.logicalKey);
+            this.progress("complete", result, retrieved.inventory.conversationId);
+          }
+        });
       } catch (error) {
         const failure = safeFailure(error);
         for (const conversation of needNetwork.filter((item) => !completedThisRun.has(item.logicalKey))) {
@@ -385,11 +386,14 @@ function mapBatches(batches: RawBatchCapture[]): Map<string, RawBatchCapture> {
 }
 
 function safeFailure(error: unknown): SafeFailure {
+  const candidate = error && typeof error === "object"
+    ? error as { code?: unknown; retryable?: unknown; correlationId?: unknown }
+    : null;
   return {
-    code: error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "CAPTURE_FAILED",
+    code: typeof candidate?.code === "string" ? candidate.code : "CAPTURE_FAILED",
     message: error instanceof Error ? error.message : "Conversation capture failed.",
-    retryable: false,
-    correlationId: crypto.randomUUID(),
+    retryable: candidate?.retryable === true,
+    correlationId: typeof candidate?.correlationId === "string" ? candidate.correlationId : crypto.randomUUID(),
   };
 }
 

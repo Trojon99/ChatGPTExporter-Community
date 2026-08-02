@@ -99,6 +99,48 @@ describe("journaled ChatGPT capture engine", () => {
     expect(repeat.projectAssetCount).toBe(1);
     expect(repeatTransport.request).not.toHaveBeenCalled();
   });
+
+  it("keeps completed batch checkpoints when a later provider request fails", async () => {
+    const filesystem = await fixtureFilesystem();
+    const inventory = JSON.parse((await filesystem.readText("inventory.json"))!) as ConversationInventory;
+    inventory.conversations.push({
+      ...inventory.conversations[0]!,
+      logicalKey: `${workspace.workspaceFingerprint}/conversation-2`,
+      conversationId: "conversation-2",
+      listingHashes: ["listing-2"],
+      listingRecords: [{ id: "conversation-2", title: "Synthetic second" }],
+    });
+    inventory.chains[0]!.itemCount = 2;
+    inventory.chains[0]!.uniqueConversationCount = 2;
+    await filesystem.writeTextAtomic("inventory.json", prettyJson(inventory));
+    const transient = Object.assign(new Error("synthetic throttle"), { code: "RATE_LIMITED", retryable: true, correlationId: "synthetic-correlation" });
+    const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
+      if (operation.operation !== "conversation_batch") throw new Error(`unexpected ${operation.operation}`);
+      const id = operation.parameters.conversationIds[0]!;
+      if (id === "conversation-2") throw transient;
+      const body = [conversationDetail({ id }) as unknown as JsonValue];
+      return { requestId: "request", protocolVersion: BRIDGE_PROTOCOL_VERSION, ok: true, status: 200, body, responseBytes: JSON.stringify(body).length, correlationId: "correlation" };
+    });
+
+    const run = new ChatGptCaptureEngine({
+      transport: { request },
+      filesystem,
+      workspace,
+      runId: "run-checkpoint",
+      batchSize: 1,
+      includeAssets: false,
+      includeAccountArtifacts: false,
+      now: clock(),
+    }).run();
+    await expect(run).rejects.toBe(transient);
+    expect(await filesystem.readText("conversations/conversation-1/complete.json")).toBeDefined();
+    expect(await filesystem.readText("conversations/conversation-2/complete.json")).toBeUndefined();
+    const journal = JSON.parse((await filesystem.readText("runs/run-checkpoint.json"))!);
+    const latest = new Map<string, string>();
+    for (const entry of journal.entries) latest.set(entry.conversationId, entry.to);
+    expect(Object.fromEntries(latest)).toEqual({ "conversation-1": "complete", "conversation-2": "failed" });
+    expect(journal.entries.at(-1)?.error).toMatchObject({ code: "RATE_LIMITED", retryable: true, correlationId: "synthetic-correlation" });
+  });
 });
 
 async function fixtureFilesystem(includeProject = false): Promise<MemoryArchiveFileSystem> {
