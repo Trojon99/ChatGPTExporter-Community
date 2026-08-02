@@ -33,6 +33,11 @@ const server = https.createServer({
     return;
   }
   if (requestUrl.pathname === "/backend-api/conversations") {
+    if (requestUrl.searchParams.get("offset") === "42") {
+      response.writeHead(429, { "Content-Type": "application/json", "Retry-After": "2" });
+      response.end(JSON.stringify({ private_fixture_body: "must-not-cross-error-boundary" }));
+      return;
+    }
     const authorized = request.headers.authorization === "Bearer synthetic-page-local-secret"
       && request.headers["x-authorization"] === "Bearer synthetic-page-local-secret";
     response.writeHead(authorized ? 200 : 401, { "Content-Type": "application/json" });
@@ -42,6 +47,19 @@ const server = https.createServer({
       offset: 0,
       limit: 1,
     } : { error: "fixture rejected request" }));
+    return;
+  }
+  if (requestUrl.pathname === "/backend-api/accounts/check/v4-2023-04-27") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      accounts: {
+        synthetic: {
+          account: { account_id: "account-1", account_name: "Synthetic workspace", account_plan: "business" },
+          structure: "workspace",
+          is_deactivated: false,
+        },
+      },
+    }));
     return;
   }
   response.writeHead(200, { "Content-Type": "text/html" });
@@ -125,6 +143,29 @@ try {
     },
   }), { tabId: tab.tabId });
   assert(!rejected.ok && rejected.error?.code === "INVALID_BRIDGE_REQUEST", "Typed transport did not fail closed.");
+
+  const rateLimited = await dashboard.evaluate(async ({ tabId }) => chrome.runtime.sendMessage({
+    type: "CHATGPT_EXPORTER_API_REQUEST",
+    tabId,
+    request: {
+      requestId: "rate-limited-request",
+      protocolVersion: 1,
+      workspaceId: null,
+      operation: "conversation_page",
+      parameters: { offset: 42, limit: 1, archived: false },
+      timeoutMs: 10_000,
+    },
+  }), { tabId: tab.tabId });
+  assert(!rateLimited.ok && rateLimited.error?.code === "RATE_LIMITED" && rateLimited.error?.retryAfterMs === 2_000, "Rate-limit metadata was not preserved.");
+  assert(!JSON.stringify(rateLimited).includes("must-not-cross-error-boundary"), "HTTP error response body crossed the redacted bridge boundary.");
+
+  await dashboard.locator("#find-chatgpt").click();
+  await dashboard.locator("#workspace-select:not([disabled])").waitFor();
+  assert(await dashboard.locator("#workspace-select option").count() === 2, "Dashboard did not render explicit workspace selection.");
+  await dashboard.locator("#workspace-select").selectOption({ index: 1 });
+  await dashboard.locator("#preflight-workspace").click();
+  await dashboard.locator("#choose-directory:not([disabled])").waitFor();
+  assert((await dashboard.locator("#status").textContent())?.includes("Workspace verified"), "Dashboard preflight did not reach the verified state.");
   console.log("Chromium page-local authentication and allowlisted bridge test passed.");
 } finally {
   await context?.close();

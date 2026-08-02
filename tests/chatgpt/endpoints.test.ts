@@ -30,6 +30,21 @@ describe("ChatGPT endpoint allowlist", () => {
     })).toThrow("1-10");
   });
 
+  it("constructs shared, account-artifact, and file descriptor adapters without arbitrary URLs", () => {
+    expect(resolveEndpoint({ operation: "shared_page", parameters: { offset: 100, limit: 100 } }).path)
+      .toBe("/backend-api/shared_conversations?order=updated&limit=100&offset=100");
+    expect(resolveEndpoint({ operation: "account_artifact", parameters: { kind: "memories" } }).path)
+      .toBe("/backend-api/memories?include_memory_entries=true");
+    expect(resolveEndpoint({
+      operation: "file_download_descriptor",
+      parameters: { fileId: "file-1", conversationId: "conversation-1", projectId: null },
+    }).path).toBe("/backend-api/files/download/file-1?conversation_id=conversation-1&inline=false");
+    expect(() => resolveEndpoint({
+      operation: "file_download_descriptor",
+      parameters: { fileId: "file-1", conversationId: null, projectId: null },
+    })).toThrow("exactly one");
+  });
+
   it("rejects arbitrary paths, methods, bodies, headers, and extra parameters structurally", () => {
     expect(() => parseOperationRequest({
       operation: "conversation_detail",
@@ -50,5 +65,14 @@ describe("ChatGPT endpoint allowlist", () => {
     expect(request.operation).toBe("conversation_page");
     expect(() => parseApiRequest({ ...request, timeoutMs: 999 })).toThrow("timeoutMs");
     expect(() => parseApiRequest({ ...request, protocolVersion: 999 })).toThrow("protocolVersion");
+    for (const injected of [
+      { path: "http://localhost/private" },
+      { url: "//evil.example/private" },
+      { method: "DELETE" },
+      { headers: { [["Author", "ization"].join("")]: "synthetic" } },
+      { body: { is_visible: false } },
+    ]) {
+      expect(() => parseApiRequest({ ...request, ...injected })).toThrow("unexpected fields");
+    }
   });
 });

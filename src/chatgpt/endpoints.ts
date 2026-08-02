@@ -6,8 +6,12 @@ export type ChatGptOperation =
   | "conversation_page"
   | "project_page"
   | "project_conversation_page"
+  | "shared_page"
+  | "shared_detail"
   | "conversation_batch"
-  | "conversation_detail";
+  | "conversation_detail"
+  | "account_artifact"
+  | "file_download_descriptor";
 
 export type ChatGptOperationParameters =
   | { operation: "session_probe"; parameters: Record<string, never> }
@@ -15,8 +19,12 @@ export type ChatGptOperationParameters =
   | { operation: "conversation_page"; parameters: { offset: number; limit: number; archived: boolean } }
   | { operation: "project_page"; parameters: { cursor: string | null } }
   | { operation: "project_conversation_page"; parameters: { projectId: string; cursor: string | null; limit: number } }
+  | { operation: "shared_page"; parameters: { offset: number; limit: number } }
+  | { operation: "shared_detail"; parameters: { shareId: string } }
   | { operation: "conversation_batch"; parameters: { conversationIds: string[] } }
-  | { operation: "conversation_detail"; parameters: { conversationId: string } };
+  | { operation: "conversation_detail"; parameters: { conversationId: string } }
+  | { operation: "account_artifact"; parameters: { kind: "memories" | "custom_instructions" } }
+  | { operation: "file_download_descriptor"; parameters: { fileId: string; conversationId: string | null; projectId: string | null } };
 
 export interface ResolvedEndpoint {
   operation: ChatGptOperation;
@@ -61,6 +69,20 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
       if (request.parameters.cursor !== null) query.set("cursor", assertCursor(request.parameters.cursor));
       return endpoint("GET", `/backend-api/gizmos/${projectId}/conversations?${query}`, true, 20_000_000, request.operation);
     }
+    case "shared_page": {
+      assertOffset(request.parameters.offset);
+      assertLimit(request.parameters.limit);
+      const query = new URLSearchParams({
+        order: "updated",
+        limit: String(request.parameters.limit),
+        offset: String(request.parameters.offset),
+      });
+      return endpoint("GET", `/backend-api/shared_conversations?${query}`, true, 20_000_000, request.operation);
+    }
+    case "shared_detail": {
+      const shareId = assertIdentifier(request.parameters.shareId, "shareId");
+      return endpoint("GET", `/backend-api/share/${shareId}`, true, 100_000_000, request.operation);
+    }
     case "conversation_batch": {
       const ids = request.parameters.conversationIds;
       if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_BATCH_SIZE) {
@@ -75,6 +97,26 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
     case "conversation_detail": {
       const conversationId = assertIdentifier(request.parameters.conversationId, "conversationId");
       return endpoint("GET", `/backend-api/conversation/${conversationId}`, true, 100_000_000, request.operation);
+    }
+    case "account_artifact":
+      return request.parameters.kind === "memories"
+        ? endpoint("GET", "/backend-api/memories?include_memory_entries=true", true, 20_000_000, request.operation)
+        : endpoint("GET", "/backend-api/user_system_messages", true, 20_000_000, request.operation);
+    case "file_download_descriptor": {
+      const fileId = assertIdentifier(request.parameters.fileId, "fileId");
+      const conversationId = request.parameters.conversationId === null
+        ? null
+        : assertIdentifier(request.parameters.conversationId, "conversationId");
+      const projectId = request.parameters.projectId === null
+        ? null
+        : assertIdentifier(request.parameters.projectId, "projectId");
+      if ((conversationId === null) === (projectId === null)) {
+        throw new EndpointValidationError("exactly one conversationId or projectId is required");
+      }
+      const query = conversationId === null
+        ? new URLSearchParams({ gizmo_id: projectId! })
+        : new URLSearchParams({ conversation_id: conversationId, inline: "false" });
+      return endpoint("GET", `/backend-api/files/download/${fileId}?${query}`, true, 5_000_000, request.operation);
     }
   }
 }
@@ -112,6 +154,18 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
           limit: requireNumber(parameters.limit, "limit"),
         },
       };
+    case "shared_page":
+      assertOnlyKeys(parameters, ["offset", "limit"]);
+      return {
+        operation: request.operation,
+        parameters: {
+          offset: requireNumber(parameters.offset, "offset"),
+          limit: requireNumber(parameters.limit, "limit"),
+        },
+      };
+    case "shared_detail":
+      assertOnlyKeys(parameters, ["shareId"]);
+      return { operation: request.operation, parameters: { shareId: requireString(parameters.shareId, "shareId") } };
     case "conversation_batch":
       assertOnlyKeys(parameters, ["conversationIds"]);
       if (!Array.isArray(parameters.conversationIds) || !parameters.conversationIds.every((id) => typeof id === "string")) {
@@ -123,6 +177,22 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
       return {
         operation: request.operation,
         parameters: { conversationId: requireString(parameters.conversationId, "conversationId") },
+      };
+    case "account_artifact":
+      assertOnlyKeys(parameters, ["kind"]);
+      if (parameters.kind !== "memories" && parameters.kind !== "custom_instructions") {
+        throw new EndpointValidationError("account artifact kind is invalid");
+      }
+      return { operation: request.operation, parameters: { kind: parameters.kind } };
+    case "file_download_descriptor":
+      assertOnlyKeys(parameters, ["fileId", "conversationId", "projectId"]);
+      return {
+        operation: request.operation,
+        parameters: {
+          fileId: requireString(parameters.fileId, "fileId"),
+          conversationId: requireNullableString(parameters.conversationId, "conversationId"),
+          projectId: requireNullableString(parameters.projectId, "projectId"),
+        },
       };
     default:
       throw new EndpointValidationError(`unsupported operation ${request.operation}`);

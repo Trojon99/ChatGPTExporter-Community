@@ -1,5 +1,6 @@
 import type { JsonValue } from "../core/types";
 import { parseOperationRequest, type ChatGptOperationParameters } from "../chatgpt/endpoints";
+import type { ChatGptTransport } from "../chatgpt/client";
 
 export const BRIDGE_PROTOCOL_VERSION = 1 as const;
 export const PAGE_REQUEST_CHANNEL = "chatgpt-exporter:page-request:v1";
@@ -47,9 +48,51 @@ export interface ApiFailureResponse {
 
 export type ApiResponse = ApiSuccessResponse | ApiFailureResponse;
 
+export class RuntimeApiTransport implements ChatGptTransport {
+  constructor(private readonly tabId: number) {}
+
+  async request(operation: ChatGptOperationParameters, workspaceId: string | null, timeoutMs = 30_000): Promise<ApiSuccessResponse> {
+    const message = {
+      type: "CHATGPT_EXPORTER_API_REQUEST",
+      tabId: this.tabId,
+      request: {
+        ...operation,
+        requestId: crypto.randomUUID(),
+        protocolVersion: BRIDGE_PROTOCOL_VERSION,
+        workspaceId,
+        timeoutMs,
+      },
+    };
+    const response = await chrome.runtime.sendMessage<typeof message, ApiResponse>(message);
+    if (!response.ok) throw new BridgeResponseError(response);
+    return response;
+  }
+}
+
+export class BridgeResponseError extends Error {
+  readonly code: string;
+  readonly status: number | undefined;
+  readonly retryable: boolean;
+  readonly retryAfterMs: number | undefined;
+  readonly correlationId: string;
+
+  constructor(response: ApiFailureResponse) {
+    super(response.error.message);
+    this.name = "BridgeResponseError";
+    this.code = response.error.code;
+    this.status = response.status;
+    this.retryable = response.error.retryable;
+    this.retryAfterMs = response.error.retryAfterMs;
+    this.correlationId = response.error.correlationId;
+  }
+}
+
 export function parseApiRequest(value: unknown): ApiRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("request must be an object");
   const input = value as Record<string, unknown>;
+  const allowedKeys = new Set(["requestId", "protocolVersion", "workspaceId", "timeoutMs", "operation", "parameters"]);
+  const unexpectedKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
+  if (unexpectedKeys.length) invalid(`request contains unexpected fields: ${unexpectedKeys.join(", ")}`);
   const requestId = typeof input.requestId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(input.requestId)
     ? input.requestId
     : invalid("requestId is invalid");
