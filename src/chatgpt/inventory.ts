@@ -67,6 +67,7 @@ export class ChatGptInventoryEngine {
   }
 
   async run(): Promise<ConversationInventory> {
+    const previous = parsePreviousInventory(await this.options.filesystem.readText("inventory.json"), this.options.workspace.workspaceFingerprint);
     await this.captureOffsetChain("main", "main", false);
     if (this.options.settings.includeArchived) await this.captureOffsetChain("archived", "archived", true);
     if (this.options.settings.includeProjects) await this.captureProjects();
@@ -81,9 +82,16 @@ export class ChatGptInventoryEngine {
       chains: [...this.chains],
       pages: [...this.pages],
       projects: [...this.projects.values()].sort((left, right) => left.projectId.localeCompare(right.projectId)),
+      absentConversations: retainedAbsent(previous, this.conversations),
       conversations: [...this.conversations.values()].sort((left, right) => left.logicalKey.localeCompare(right.logicalKey)),
     };
     if (!inventory.complete) throw new InventoryError("INVENTORY_INCOMPLETE", "Not every inventory chain terminated normally.");
+    if (previous) {
+      const previousText = prettyJson(previous);
+      const previousHash = await sha256Hex(previousText);
+      const previousPath = `source/inventory/snapshots/inventory-${previousHash}.json`;
+      if (!await this.options.filesystem.exists(previousPath)) await this.options.filesystem.writeTextAtomic(previousPath, previousText);
+    }
     await this.options.filesystem.writeTextAtomic("inventory.json", prettyJson(inventory));
     await this.options.filesystem.writeTextAtomic("reports/reconciliation.json", prettyJson({
       schemaVersion: 1,
@@ -91,6 +99,7 @@ export class ChatGptInventoryEngine {
       workspaceFingerprint: this.options.workspace.workspaceFingerprint,
       inventoryHash: await hashJson(JSON.parse(JSON.stringify(inventory)) as JsonValue),
       expectedConversationCount: inventory.conversations.length,
+      absentRetainedConversationCount: inventory.absentConversations?.length ?? 0,
       pageEvidenceCount: inventory.pages.length,
       aggregateResponseBytes: this.aggregateBytes,
       allChainsComplete: inventory.chains.every((item) => item.complete && item.terminationReason !== null),
@@ -467,4 +476,30 @@ async function hashIds(ids: string[]): Promise<string> {
 
 function membershipKey(membership: ScopeMembership): string {
   return `${membership.scope}\0${membership.projectId ?? ""}\0${membership.shareId ?? ""}`;
+}
+
+function parsePreviousInventory(value: string | undefined, workspaceFingerprint: string): ConversationInventory | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(value) as ConversationInventory;
+    return parsed.schemaVersion === 1
+      && parsed.provider === "chatgpt-web"
+      && parsed.workspaceFingerprint === workspaceFingerprint
+      && parsed.complete
+      && Array.isArray(parsed.conversations)
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function retainedAbsent(previous: ConversationInventory | undefined, current: Map<string, InventoryConversation>): InventoryConversation[] {
+  if (!previous) return [];
+  const candidates = [...previous.conversations, ...(previous.absentConversations ?? [])];
+  const absent = new Map<string, InventoryConversation>();
+  for (const conversation of candidates) {
+    if (!current.has(conversation.logicalKey)) absent.set(conversation.logicalKey, conversation);
+  }
+  return [...absent.values()].sort((left, right) => left.logicalKey.localeCompare(right.logicalKey));
 }

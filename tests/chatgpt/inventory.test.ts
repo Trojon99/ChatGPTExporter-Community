@@ -174,6 +174,29 @@ describe("ChatGPT complete inventory", () => {
     expect(await first.exists("inventory.json")).toBe(true);
     expect(await second.exists("inventory.json")).toBe(true);
   });
+
+  it("retains remotely absent conversations and snapshots the previous complete inventory", async () => {
+    const filesystem = new MemoryArchiveFileSystem();
+    const first = new ChatGptInventoryEngine({
+      transport: scriptedTransport((operation) => operation.operation === "conversation_page"
+        ? page([{ id: "conversation-removed", title: "Retained", create_time: 1, update_time: 2 }], 1, 0)
+        : (() => { throw new Error("unexpected operation"); })()),
+      filesystem,
+      workspace,
+      settings: { ...DEFAULT_INVENTORY_SETTINGS, includeArchived: false, includeProjects: false, includeShared: false },
+    });
+    await first.run();
+    const second = new ChatGptInventoryEngine({
+      transport: scriptedTransport(() => page([], 0, 0)),
+      filesystem,
+      workspace,
+      settings: { ...DEFAULT_INVENTORY_SETTINGS, includeArchived: false, includeProjects: false, includeShared: false },
+    });
+    const inventory = await second.run();
+    expect(inventory.conversations).toHaveLength(0);
+    expect(inventory.absentConversations?.map((item) => item.conversationId)).toEqual(["conversation-removed"]);
+    expect(filesystem.paths().filter((path) => path.startsWith("source/inventory/snapshots/"))).toHaveLength(1);
+  });
 });
 
 function page(items: JsonValue[], total: number | null, offset: number): JsonValue {

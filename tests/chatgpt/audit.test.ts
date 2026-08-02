@@ -42,6 +42,17 @@ describe("independent archive audit", () => {
     expect(report.terminalState).toBe("incomplete");
     expect(report.findings.some((finding) => finding.code === "DERIVED_HASH_MISMATCH")).toBe(true);
   });
+
+  it("keeps a completed remotely absent conversation in the import index", async () => {
+    const filesystem = await capturedArchive();
+    const inventory = JSON.parse((await filesystem.readText("inventory.json"))!) as ConversationInventory;
+    inventory.absentConversations = inventory.conversations;
+    inventory.conversations = [];
+    await filesystem.writeTextAtomic("inventory.json", prettyJson(inventory));
+    const report = await auditArchive({ filesystem, extensionVersion: "0.0.0-test" });
+    expect(report).toMatchObject({ terminalState: "complete", expectedConversationCount: 0, extraRetainedConversationCount: 1 });
+    expect(await filesystem.readText("indexes/conversations.jsonl")).toContain('"absentFromCurrentInventory":true');
+  });
 });
 
 async function capturedArchive(): Promise<MemoryArchiveFileSystem> {

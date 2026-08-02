@@ -86,6 +86,7 @@ export interface ConversationInventory {
   chains: InventoryChain[];
   pages: InventoryPageRecord[];
   projects?: InventoryProject[];
+  absentConversations?: InventoryConversation[];
   conversations: InventoryConversation[];
 }
 

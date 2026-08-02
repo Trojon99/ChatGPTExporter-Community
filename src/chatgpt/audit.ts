@@ -138,7 +138,45 @@ export async function auditArchive(options: {
   for (const path of completionPaths) {
     if (![...expectedPathById.values()].includes(path)) {
       const marker = parseJson<ConversationCompletionMarker>(await filesystem.readText(path));
-      if (marker?.conversationId) completionIds.push(marker.conversationId);
+      if (!marker?.conversationId) {
+        findings.push(error("RETAINED_COMPLETION_INVALID", "Retained completion marker is not readable.", path));
+        continue;
+      }
+      const base = path.replace(/\/complete\.json$/, "");
+      const normalizedPath = `${base}/conversation.json`;
+      const rawMarkerPath = `${base}/raw-complete.json`;
+      const normalizedText = await filesystem.readText(normalizedPath);
+      const rawMarkerText = await filesystem.readText(rawMarkerPath);
+      const assetsText = await filesystem.readText(`${base}/assets.json`);
+      await verifyTextHash(rawMarkerText, marker.rawMarkerHash, rawMarkerPath, findings);
+      await verifyTextHash(normalizedText, marker.normalizedHash, normalizedPath, findings);
+      await verifyTextHash(assetsText, marker.assetsHash, `${base}/assets.json`, findings);
+      const normalized = parseJson<NormalizedConversation>(normalizedText);
+      const rawMarker = parseJson<RawCompletionMarker>(rawMarkerText);
+      if (!isNormalizedConversation(normalized) || !rawMarker) {
+        findings.push(error("RETAINED_CONVERSATION_INVALID", "Retained conversation raw or normalized record is invalid.", base));
+        continue;
+      }
+      await verifyRawGraph(filesystem, rawMarker, normalized, findings);
+      conversationRows.push({
+        logicalKey: marker.logicalKey,
+        conversationId: marker.conversationId,
+        title: normalized.title,
+        createTime: normalized.createTime,
+        updateTime: normalized.updateTime,
+        memberships: normalized.memberships,
+        normalizedPath,
+        rawPath: rawMarker.detailPath,
+        normalizedHash: marker.normalizedHash,
+        assetStatus: marker.assetStatus,
+        absentFromCurrentInventory: true,
+      });
+      const assets = parseJson<ConversationAssetIndex>(assetsText);
+      if (assets && Array.isArray(assets.assets)) {
+        logicalAssetReferenceCount += assets.assets.length;
+        partialAssetReferenceCount += assets.assets.filter((asset) => asset.status === "failed").length;
+        await verifyAssets(filesystem, assets.assets, findings);
+      }
     }
   }
   for (const path of allPaths.filter((candidate) => candidate.startsWith("staging/") || candidate.endsWith(".part"))) {
