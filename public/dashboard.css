@@ -27,6 +27,7 @@ select { width: 100%; border: 1px solid #3a443d; border-radius: 2px; background:
 select[multiple] option { padding: 7px 8px; }
 select:disabled { opacity: .45; }
 .inventory-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 24px; align-items: center; }
+.capture-panel { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 fieldset { border: 1px solid var(--line); display: flex; gap: 14px; padding: 10px 12px 12px; }
 legend { color: var(--muted); font-size: 11px; padding: 0 5px; }
 fieldset label { color: #c9d1ca; font-size: 12px; white-space: nowrap; }
@@ -50,5 +51,6 @@ code { color: #c8d2ca; }
   header, .destination, .section-heading { align-items: stretch; flex-direction: column; }
   .workspace-panel { grid-template-columns: 1fr; }
   .inventory-panel { grid-template-columns: 1fr; }
+  .capture-panel { align-items: stretch; flex-direction: column; }
   fieldset { flex-wrap: wrap; }
 }

@@ -67,6 +67,14 @@
         <button id="run-inventory" type="button" disabled>Build inventory</button>
       </section>
 
+      <section class="panel capture-panel">
+        <div>
+          <h2>5. Capture conversation bodies</h2>
+          <p>Batch responses are reconciled against inventory, suspicious records fall back to single detail, and every raw revision is hashed before normalized output is published.</p>
+        </div>
+        <button id="run-capture" type="button" disabled>Capture conversations</button>
+      </section>
+
       <section class="panel run-panel">
         <p id="status" data-state="idle">Open a signed-in ChatGPT tab to begin preflight.</p>
         <div id="log" aria-live="polite"></div>
