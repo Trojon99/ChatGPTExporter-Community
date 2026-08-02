@@ -1,5 +1,6 @@
 import type { WorkspaceSelection } from "../core/types";
 import { parseAccountsEnvelope, parseConversationPage } from "./envelopes";
+import type { ChatGptAccountRecord } from "./envelopes";
 import type { ChatGptOperationParameters } from "./endpoints";
 import type { ApiSuccessResponse } from "../extension/protocol";
 
@@ -25,7 +26,12 @@ export class ChatGptClient {
     await this.transport.request({ operation: "session_probe", parameters: {} }, null);
     const response = await this.transport.request({ operation: "accounts_list", parameters: {} }, null);
     const envelope = parseAccountsEnvelope(response.body);
-    const workspaces = await Promise.all(Object.values(envelope.accounts).map(async (record, index) => {
+    const uniqueAccounts = new Map<string, (typeof envelope.accounts)[string]>();
+    for (const record of Object.values(envelope.accounts)) {
+      const existing = uniqueAccounts.get(record.account.account_id);
+      if (!existing || accountRecordScore(record) > accountRecordScore(existing)) uniqueAccounts.set(record.account.account_id, record);
+    }
+    const workspaces = await Promise.all([...uniqueAccounts.values()].map(async (record, index) => {
       const accountId = record.account.account_id;
       const label = cleanLabel(record.account.account_name) ?? defaultLabel(record.structure, index);
       return {
@@ -59,6 +65,13 @@ export class ChatGptClient {
     }
     return { ok: true, workspace: verified, recognizedEmptyAccount, sampledConversationId };
   }
+}
+
+function accountRecordScore(record: ChatGptAccountRecord): number {
+  return Number(Boolean(record.account.account_name))
+    + Number(Boolean(record.account.account_plan))
+    + Number(Boolean(record.structure))
+    + Number(record.is_deactivated !== undefined);
 }
 
 export async function workspaceFingerprint(accountId: string): Promise<string> {

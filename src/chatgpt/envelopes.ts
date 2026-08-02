@@ -128,14 +128,22 @@ export function parseAccountsEnvelope(value: unknown): ChatGptAccountsEnvelope {
   for (const [key, value] of Object.entries(rawAccounts)) {
     const record = requireRecord(value, `account ${key}`);
     const account = requireRecord(record.account, `account ${key}.account`);
+    const accountName = optionalString(account.account_name, `account ${key}.account.account_name`)
+      ?? optionalString(account.name, `account ${key}.account.name`);
+    const accountPlan = optionalString(account.account_plan, `account ${key}.account.account_plan`)
+      ?? optionalString(account.plan_type, `account ${key}.account.plan_type`);
+    const structure = optionalString(record.structure, `account ${key}.structure`)
+      ?? optionalString(account.structure, `account ${key}.account.structure`);
+    const deactivated = optionalBoolean(record.is_deactivated, `account ${key}.is_deactivated`)
+      ?? optionalBoolean(account.is_deactivated, `account ${key}.account.is_deactivated`);
     accounts[key] = {
       account: {
         account_id: requiredString(account.account_id, `account ${key}.account_id`),
-        ...optionalStringProperty(account, "account_name"),
-        ...optionalStringProperty(account, "account_plan"),
+        ...(accountName === undefined ? {} : { account_name: accountName }),
+        ...(accountPlan === undefined ? {} : { account_plan: accountPlan }),
       },
-      ...optionalStringProperty(record, "structure"),
-      ...optionalBooleanProperty(record, "is_deactivated"),
+      ...(structure === undefined ? {} : { structure }),
+      ...(deactivated === undefined ? {} : { is_deactivated: deactivated }),
     };
   }
   return { accounts };
@@ -266,14 +274,4 @@ function optionalBoolean(value: unknown, name: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new EnvelopeError(`${name} must be a boolean`);
   return value;
-}
-
-function optionalStringProperty(object: Record<string, unknown>, key: string): Record<string, string> {
-  const value = optionalString(object[key], key);
-  return value === undefined ? {} : { [key]: value };
-}
-
-function optionalBooleanProperty(object: Record<string, unknown>, key: string): Record<string, boolean> {
-  const value = optionalBoolean(object[key], key);
-  return value === undefined ? {} : { [key]: value };
 }

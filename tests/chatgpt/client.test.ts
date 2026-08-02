@@ -16,6 +16,21 @@ describe("ChatGPT account discovery and preflight", () => {
     expect(await workspaceFingerprint("account-business")).toBe(workspaces[0]?.workspaceFingerprint);
   });
 
+  it("deduplicates live account aliases and reads nested account metadata", async () => {
+    const transport = fixtureTransport({}, {
+      first: {
+        account: { account_id: "account-personal", name: "Personal workspace", plan_type: "plus", structure: "personal", is_deactivated: false },
+      },
+      alias: {
+        account: { account_id: "account-personal", name: "Personal workspace", plan_type: "plus", structure: "personal", is_deactivated: false },
+      },
+    });
+
+    expect(await new ChatGptClient(transport).discoverWorkspaces()).toMatchObject([
+      { label: "Personal workspace", kind: "personal", deactivated: false },
+    ]);
+  });
+
   it("preflights an explicitly selected workspace against one conversation", async () => {
     const transport = fixtureTransport();
     const client = new ChatGptClient(transport);
@@ -55,14 +70,17 @@ describe("ChatGPT account discovery and preflight", () => {
   });
 });
 
-function fixtureTransport(pageOverrides: Record<string, JsonValue> = {}): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
+function fixtureTransport(
+  pageOverrides: Record<string, JsonValue> = {},
+  accountOverrides?: Record<string, JsonValue>,
+): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
     let body: JsonValue;
     if (operation.operation === "session_probe") {
       body = { authenticated: true, expiresAt: "2099-01-01T00:00:00.000Z" };
     } else if (operation.operation === "accounts_list") {
       body = {
-        accounts: {
+        accounts: accountOverrides ?? {
           business: {
             account: { account_id: "account-business", account_name: "Business\u0000 workspace", account_plan: "business" },
             structure: "workspace",
