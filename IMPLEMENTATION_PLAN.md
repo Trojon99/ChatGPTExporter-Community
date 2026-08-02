@@ -699,7 +699,7 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 - [x] Record clean status, current commit, build hash, package hash, and full test results for GrokExporter.
 - [x] Create `/home/travis/Projects/ChatGPTExport`, initialize Git, add license/package skeleton, and establish ignore/privacy scanning before research or live data.
-- [ ] Copy the minimal proven core/build/dashboard files with provenance notes and prove the empty extension builds.
+- [x] Copy the minimal proven core/build/dashboard files with provenance notes and prove the empty extension builds.
 - [x] Clone and pin upstream references under ignored paths; write the research/license matrix.
 - [x] Add this ChatGPT plan to the sibling repository and make it the goal's authoritative checklist.
 
@@ -812,3 +812,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Initialized `/home/travis/Projects/ChatGPTExport` with the privacy boundary before upstream research or live access. Commits `c703807`, `33eb95e`, and `a803813` establish ignores/scanning/hooks, adopt the authoritative plan, and pin the MIT research references.
 - Confirmed `research/repos/` is ignored and contains the exact upstream revisions in the research matrix. No ChatGPT authentication, endpoint, account, or conversation data has been accessed.
 - Next: copy the minimal build/dashboard/core baseline with provenance, replace Grok branding and host permissions with a no-network ChatGPT skeleton, and prove the packaged extension before implementing authentication.
+
+### 2026-08-01 — No-network extension baseline proven
+
+- Commit `0867794` adds the minimal MV3 build/package/dashboard/runtime shape adapted from GrokExporter, with source-level provenance comments and ChatGPT-only `https://chatgpt.com/*` host permission.
+- The baseline intentionally performs no authenticated fetches: every API request fails closed with `ENDPOINTS_NOT_IMPLEMENTED`, while the service worker can discover an open ChatGPT tab and the dashboard can persist a user-selected directory handle.
+- Passed TypeScript checking, 2/2 focused unit tests, privacy scanning over 24 tracked/unignored files, production build, and a packaged headless-Chromium extension test against a synthetic HTTPS `chatgpt.com` origin.
+- Two consecutive packages produced SHA-256 `1ac94298f2e3cd59207fc3fcc738c8fd0489bcd61d9cedbf148f6d16c524a394`. No ChatGPT authentication or personal conversation data was accessed.
+- The test runner now explicitly scopes Vitest to this repository's tests so ignored upstream Jest suites cannot be collected, and it locates a Playwright Chromium installation without depending on branded Chrome's extension behavior in headless mode.
+- Next: define the complete provider schemas and typed allowlisted transport, then prove page-local ephemeral authentication with synthetic tests before touching a live account.
