@@ -706,10 +706,10 @@ Agents must update the progress journal, decision log, and lessons after each me
 #### Phase CG-B — types, protocol, and authentication
 
 - [x] Define ChatGPT raw/inventory/journal/normalized/asset/account-artifact schemas and synthetic fixture builders.
-- [ ] Define typed bridge requests/responses and enforce the endpoint/method/body allowlist in service worker and page world.
+- [x] Define typed bridge requests/responses and enforce the endpoint/method/body allowlist in service worker and page world.
 - [x] Implement ephemeral `/api/auth/session` handling and tests proving tokens never leave the page bridge.
-- [ ] Implement account/workspace discovery and explicit selection without cookie reads.
-- [ ] Implement preflight, reauthentication pause, rate-limit handling, error redaction, and malicious-request tests.
+- [x] Implement account/workspace discovery and explicit selection without cookie reads.
+- [x] Implement preflight, reauthentication pause, rate-limit handling, error redaction, and malicious-request tests.
 
 #### Phase CG-C — complete inventory
 
@@ -830,3 +830,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Passed TypeScript checking, 15/15 unit tests, privacy scanning over 32 tracked/unignored files, production build, and a packaged Chromium test that exercises a synthetic session and authenticated conversation listing. The browser test proves the token is absent from observable extension responses and rejects an injected arbitrary origin/path request.
 - Fixed a browser-only binding failure discovered by the packaged test: native `window.fetch` is now invoked through a closure so it retains the correct receiver. No live account or private conversation data was accessed.
 - Next: complete every remaining endpoint descriptor, implement sanitized multi-workspace discovery and explicit selection, then add preflight/error/rate-limit/malicious-request coverage before live calibration.
+
+### 2026-08-01 — Workspace selection and CG-B preflight gate completed
+
+- Commit `fe80151` completes the typed JSON endpoint set needed by later phases: main/archived listings, project index and project conversations, shared listings/details, batch and single details, account artifacts, and authenticated file-download descriptors. Exact identifier/cursor/page/batch constraints construct every method, path, query, and body inside the page bridge.
+- Added `ChatGptClient`, stable SHA-256 workspace fingerprints, sanitized workspace labels, deactivated-account rejection, explicit dashboard selection, and revalidation of the selected account against a one-item listing or a server-declared empty history.
+- The dashboard keeps directory selection disabled until workspace preflight succeeds. Authentication expiry requests a normal ChatGPT refresh/sign-in; rate limits preserve only bounded cooldown metadata; error response bodies and account IDs are excluded from logs.
+- Passed TypeScript checking, 19/19 unit tests, privacy scanning over 34 tracked/unignored files, production build, and packaged Chromium UI/bridge acceptance. Malicious cases cover arbitrary/localhost/protocol-relative URL fields, destructive methods/bodies, caller-supplied headers, traversal identifiers, unknown fields, oversized pages/batches, and duplicate batch IDs.
+- The browser fixture additionally proves a `429` response preserves `Retry-After` while dropping its private body, and that workspace discovery requires a user-visible explicit selection before preflight. No live account or private conversation data was accessed.
+- Next: implement inventory-first main and archived pagination with append-preserving raw page evidence, fail-closed safety limits, deterministic page hashes, normal termination proof, and reconciliation before adding projects/shared/multi-workspace union behavior.
