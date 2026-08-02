@@ -22,7 +22,7 @@ describe("ChatGPT account discovery and preflight", () => {
         account: { account_id: "account-personal", name: "Personal workspace", plan_type: "plus", structure: "personal", is_deactivated: false },
       },
       alias: {
-        account: { account_id: "account-personal", name: "Personal workspace", plan_type: "plus", structure: "personal", is_deactivated: false },
+        account: { account_id: "account-personal", name: null, plan_type: null, structure: null, is_deactivated: false },
       },
     });
 

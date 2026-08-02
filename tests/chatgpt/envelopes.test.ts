@@ -41,6 +41,12 @@ describe("ChatGPT provider envelopes", () => {
     }).accounts.internal_key?.account.account_id).toBe("account-1");
   });
 
+  it("redacts account map keys from validation errors", () => {
+    const parse = () => parseAccountsEnvelope({ accounts: { "private-account-key": { account: { account_id: null } } } });
+    expect(parse).toThrowError(/accounts entry 0\.account_id/);
+    expect(parse).not.toThrowError(/private-account-key/);
+  });
+
   it("parses session secrets only through an explicitly page-local function", () => {
     expect(parseSessionEnvelopeInsidePage({ accessToken: "synthetic-token", expires: "2099-01-01T00:00:00Z" }).expires)
       .toBe("2099-01-01T00:00:00Z");

@@ -125,20 +125,21 @@ export function parseAccountsEnvelope(value: unknown): ChatGptAccountsEnvelope {
   const object = requireRecord(value, "accounts envelope");
   const rawAccounts = requireRecord(object.accounts, "accounts envelope.accounts");
   const accounts: Record<string, ChatGptAccountRecord> = {};
-  for (const [key, value] of Object.entries(rawAccounts)) {
-    const record = requireRecord(value, `account ${key}`);
-    const account = requireRecord(record.account, `account ${key}.account`);
-    const accountName = optionalString(account.account_name, `account ${key}.account.account_name`)
-      ?? optionalString(account.name, `account ${key}.account.name`);
-    const accountPlan = optionalString(account.account_plan, `account ${key}.account.account_plan`)
-      ?? optionalString(account.plan_type, `account ${key}.account.plan_type`);
-    const structure = optionalString(record.structure, `account ${key}.structure`)
-      ?? optionalString(account.structure, `account ${key}.account.structure`);
-    const deactivated = optionalBoolean(record.is_deactivated, `account ${key}.is_deactivated`)
-      ?? optionalBoolean(account.is_deactivated, `account ${key}.account.is_deactivated`);
+  for (const [index, [key, value]] of Object.entries(rawAccounts).entries()) {
+    const label = `accounts entry ${index}`;
+    const record = requireRecord(value, label);
+    const account = requireRecord(record.account, `${label}.account`);
+    const accountName = optionalMetadataString(account.account_name, `${label}.account.account_name`)
+      ?? optionalMetadataString(account.name, `${label}.account.name`);
+    const accountPlan = optionalMetadataString(account.account_plan, `${label}.account.account_plan`)
+      ?? optionalMetadataString(account.plan_type, `${label}.account.plan_type`);
+    const structure = optionalMetadataString(record.structure, `${label}.structure`)
+      ?? optionalMetadataString(account.structure, `${label}.account.structure`);
+    const deactivated = optionalBoolean(record.is_deactivated, `${label}.is_deactivated`)
+      ?? optionalBoolean(account.is_deactivated, `${label}.account.is_deactivated`);
     accounts[key] = {
       account: {
-        account_id: requiredString(account.account_id, `account ${key}.account_id`),
+        account_id: requiredString(account.account_id, `${label}.account_id`),
         ...(accountName === undefined ? {} : { account_name: accountName }),
         ...(accountPlan === undefined ? {} : { account_plan: accountPlan }),
       },
@@ -233,6 +234,11 @@ function requiredIdentifier(value: unknown, name: string): string {
 
 function optionalString(value: unknown, name: string): string | undefined {
   if (value === undefined) return undefined;
+  return requiredString(value, name);
+}
+
+function optionalMetadataString(value: unknown, name: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
   return requiredString(value, name);
 }
 
