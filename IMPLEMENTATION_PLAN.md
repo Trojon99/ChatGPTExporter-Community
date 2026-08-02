@@ -726,10 +726,10 @@ Agents must update the progress journal, decision log, and lessons after each me
 - [x] Implement append-preserving raw revisions, journal transitions, completion markers, and resume.
 - [x] Implement graph validation and loss-aware message/content normalization.
 - [x] Implement deterministic branch-aware Markdown and normalized JSON.
-- [ ] Implement citation/content-reference, browsing/tool/code, Canvas, deep-research, and unknown-block handling.
-- [ ] Implement upload/generated-media/audio/video/inline asset extraction and safe authenticated downloads.
-- [ ] Implement content hashing, deduplication, signed-URL redaction, asset indexes, and partial-asset reporting.
-- [ ] Implement auxiliary memories/custom-instructions/settings capture separately from conversations.
+- [x] Implement citation/content-reference, browsing/tool/code, Canvas, deep-research, and unknown-block handling.
+- [x] Implement upload/generated-media/audio/video/inline asset extraction and safe authenticated downloads.
+- [x] Implement content hashing, deduplication, signed-URL redaction, asset indexes, and partial-asset reporting.
+- [x] Implement auxiliary memories/custom-instructions/settings capture separately from conversations.
 
 #### Phase CG-E — dashboard, integration, and release-quality verification
 
@@ -873,3 +873,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Commit `d6e1f8c` exposes this workflow in the dashboard across every selected isolated workspace. Capture begins only after complete inventory and reports fetched, rebuilt, unchanged, and failed terminal counts explicitly.
 - Passed TypeScript checking, 39/39 unit tests, privacy scanning over 50 tracked/unignored files, production build, and packaged Chromium acceptance. No live account or private conversation data was accessed.
 - Next: implement complete asset descriptor extraction and bounded authenticated byte transport, then add content-addressed deduplication, safe signed-URL handling, asset indexes, and partial-asset terminal reporting.
+
+### 2026-08-01 — Loss-aware content, account artifacts, and complete asset scopes implemented
+
+- Commits `5889170`, `2e42477`, and `13cd80e` keep signed download URLs inside the page world, stream bounded opaque byte chunks through the typed bridge, hash incrementally, publish content-addressed files, deduplicate physical bytes, redact URL queries from derived records/errors, and report per-reference failures without hiding successful assets.
+- Commits `7490657` and `f432c97` capture sanitized session/workspace metadata, memories, custom instructions, general settings, and beta-feature settings as separate append-preserving account artifacts. A validated artifact marker makes an unchanged repeat perform zero auxiliary requests, while any failed endpoint leaves an explicit partial result.
+- Commit `2a1bdd8` preserves completed deep-research results alongside citation/content-reference, browsing, tool/code, Canvas, and unknown provider blocks. Raw message/conversation extensions remain authoritative when a new content shape is not yet understood.
+- Commits `49555d5` and `5847295` close the project-file completeness gap: project metadata and files are inventoried from every project-index page, including projects with zero conversations, then downloaded through project-scoped descriptors with their own completion markers. Project and conversation assets share the same content-addressed byte store and global logical-reference index.
+- Passed TypeScript checking, 55/55 unit tests across 15 files, privacy scanning over 59 tracked/unignored files, a production build, and packaged Chromium page-local authentication/allowlist acceptance. Signed URL query text is absent from observable extension responses and synthetic tracked fixtures. No live account or private conversation data was accessed.
+- Phase CG-D is complete under synthetic evidence. Next: finish explicit dashboard terminal-state UX and the complete deterministic integration matrix, then implement the unified-archive directory adapter and release-quality documentation before live calibration.
