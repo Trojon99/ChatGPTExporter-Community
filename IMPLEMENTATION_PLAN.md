@@ -733,10 +733,10 @@ Agents must update the progress journal, decision log, and lessons after each me
 
 #### Phase CG-E — dashboard, integration, and release-quality verification
 
-- [ ] Adapt the dashboard for workspace selection, scope status, inventory confirmation, capture progress, and explicit terminal states.
+- [x] Adapt the dashboard for workspace selection, scope status, inventory confirmation, capture progress, and explicit terminal states.
 - [ ] Add deterministic mock transport integration cases for every required scope/content/failure mode.
-- [ ] Add packaged Chromium bridge tests and directory-permission/resume acceptance.
-- [ ] Add unified-archive directory adapter/compatibility output and idempotent import tests.
+- [x] Add packaged Chromium bridge tests and directory-permission/resume acceptance.
+- [x] Add unified-archive directory adapter/compatibility output and idempotent import tests.
 - [ ] Write installation, architecture, web-contract, privacy, troubleshooting, and contribution documentation.
 - [ ] Pass typecheck, all tests, privacy scan, two identical builds, and manual manifest-permission review.
 - [ ] Create and push the public `ChatGPTExporter` repository only after the tracked-tree privacy audit passes.
@@ -882,3 +882,12 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Commits `49555d5` and `5847295` close the project-file completeness gap: project metadata and files are inventoried from every project-index page, including projects with zero conversations, then downloaded through project-scoped descriptors with their own completion markers. Project and conversation assets share the same content-addressed byte store and global logical-reference index.
 - Passed TypeScript checking, 55/55 unit tests across 15 files, privacy scanning over 59 tracked/unignored files, a production build, and packaged Chromium page-local authentication/allowlist acceptance. Signed URL query text is absent from observable extension responses and synthetic tracked fixtures. No live account or private conversation data was accessed.
 - Phase CG-D is complete under synthetic evidence. Next: finish explicit dashboard terminal-state UX and the complete deterministic integration matrix, then implement the unified-archive directory adapter and release-quality documentation before live calibration.
+
+### 2026-08-01 — Independent audit, complete dashboard workflow, and unified import implemented
+
+- Commits `7c8e6e1` and `8336cc3` add conservative request delay/concurrency control with cooperative pause/resume/cancel before the next request, plus complete archive enumeration for independent verification. Commit `c4247cb` audits inventory/completion/normalized sets, marker and byte hashes, raw-to-normalized graph traceability, content-addressed assets, temporary-file absence, byte totals, and writes validation reports, `archive.json`, and streaming import indexes.
+- Commit `4088a60` exposes workspace/scope state, persisted directory permission, aggregate inventory confirmation, account/artifact and asset scope controls, request pacing, batch size, start/resume/retry, pause/resume/cancel, revalidate-only mode, and distinct complete/assets-partial/incomplete/authentication-required states. The packaged Chromium test now uses an extension-origin directory, proves a paused next request does not start, resumes inventory and two-batch capture, reaches audited completion, and preserves an authoritative tree hash across local revalidation.
+- Commit `4c0f8cd` snapshots each prior complete inventory, retains remote-absent conversations separately from the current expected set, and keeps their validated completed records in the import index instead of silently dropping local archive history.
+- Commit `400c283` in `/home/travis/Projects/agent_session_migration` adds ChatGPT adapter `1.1.0` for audited ChatGPTExporter directories. It streams `indexes/conversations.jsonl`, verifies contained paths and normalized hashes, preserves graph branches/memberships/citations/provider extensions, registers assets and per-conversation raw provenance, and proves import/version counts `1→0→1` for first, unchanged, and changed content. The dependency-free archive suite passes 59/59 tests with warnings as errors.
+- ChatGPTExporter passes 60/60 tests across 17 files, privacy scanning over 63 tracked/unignored files, TypeScript, production build, and packaged browser acceptance at this milestone. No live account or private conversation data was accessed.
+- Next: complete the explicit mock integration failure/resume matrix, release documentation, reproducible-package checks, and public repository publication, then begin the authenticated private full-account run.
