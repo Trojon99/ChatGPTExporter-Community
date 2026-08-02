@@ -140,13 +140,16 @@ async function preflightWorkspace(): Promise<void> {
     }
     verifiedWorkspaces = verified;
     chooseButton.disabled = false;
-    inventoryButton.disabled = true;
     captureButton.disabled = true;
-    setStatus(`Verified ${verified.length} selected workspace${verified.length === 1 ? "" : "s"}${emptyCount ? ` (${emptyCount} empty)` : ""}. Choose their parent archive directory.`, "ready");
-    if (directoryHandle && await ensureDirectoryPermission(directoryHandle, false)) {
-      directoryLabel.textContent = `${directoryHandle.name} (previous selection; choose again to confirm for this workspace)`;
+    const retainedDirectory = directoryHandle && await ensureDirectoryPermission(directoryHandle, false);
+    if (retainedDirectory) {
+      inventoryButton.disabled = false;
+      directoryLabel.textContent = `${directoryHandle!.name} (permission retained)`;
+      setStatus(`Verified ${verified.length} selected workspace${verified.length === 1 ? "" : "s"}${emptyCount ? ` (${emptyCount} empty)` : ""}. The retained archive directory is ready.`, "ready");
     } else {
+      inventoryButton.disabled = true;
       directoryLabel.textContent = "No directory selected for this workspace";
+      setStatus(`Verified ${verified.length} selected workspace${verified.length === 1 ? "" : "s"}${emptyCount ? ` (${emptyCount} empty)` : ""}. Choose their parent archive directory.`, "ready");
     }
     log.textContent = `Preflight passed for ${verified.length} workspace fingerprint${verified.length === 1 ? "" : "s"}. Each archive will use ChatGPTExport-<fingerprint>; no raw account identifier is written.`;
   } catch (error) {
