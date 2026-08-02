@@ -1,0 +1,15 @@
+{
+  "name": "chatgpt-exporter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A complete, resumable, privacy-first local exporter for ChatGPT web conversations.",
+  "type": "module",
+  "scripts": {
+    "privacy:check": "node scripts/privacy-check.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
+
