@@ -273,7 +273,7 @@ When a live run reveals a parser or optional-adapter change, preserve the old co
 
 ## ChatGPTExporter expansion program
 
-Status: planned
+Status: standalone implementation complete; private full-account acceptance in progress
 Added: 2026-08-01
 Implementation workspace: `/home/travis/Projects/ChatGPTExport`
 Final consolidation workspace: `/home/travis/Projects/ConversationExporters`
@@ -900,3 +900,11 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Final gates pass: TypeScript, 68/68 tests across 19 files, privacy scanning over 71 tracked/unignored files, production build, expanded packaged Chromium workflow, full Git object/path audit, and two deterministic ZIPs with SHA-256 `2e9259cafa4d3de142d872564e9e55d9ab15f102ec4c19629858cd3f7df67937`.
 - Created and verified public repository `https://github.com/siraht/ChatGPTExporter`; `main` and `origin/main` matched commit `bbb8b4fe266da5726ca6c9d88953e9412697eaea` before this plan-only follow-up. No live account or private archive data was accessed or published.
 - Phase CG-E is complete. Next: load version `0.1.0` in the user's normal signed-in Chromium profile, calibrate one harmless synthetic live conversation, grant a private parent directory, then complete every CG-F inventory/capture/audit/import acceptance gate before consolidation.
+
+### 2026-08-01 — Authenticated live preflight and first provider-drift repair
+
+- Started the private acceptance run in a dedicated, ignored browser profile and completed normal ChatGPT sign-in. The extension found two active accessible workspaces and successfully preflighted both without returning, logging, or persisting access tokens or raw account identifiers.
+- Branded Google Chrome 150 silently ignored unpacked-extension command-line loading, so the acceptance browser now uses the locally installed Chrome for Testing with the same dedicated profile. This is an operator/runtime constraint only; the public extension manifest and least-privilege permissions are unchanged.
+- Live listing calibration found that conversation pages now encode `create_time` and `update_time` as ISO-8601 strings while conversation details still use numeric epoch seconds. Commit `7b4994e` adds narrow envelope-boundary conversion to epoch seconds and a regression fixture; malformed timestamp strings still fail closed.
+- Passed 69/69 tests across 19 files, TypeScript checking, the tracked-file privacy scan over 71 files, and a production build after the repair. No conversation body, title, identifier, account identifier, credential, signed URL, browser state, or private archive artifact was committed or logged.
+- Next: grant the native browser directory permission for the private parent directory, inventory both verified workspaces across every enabled scope, review aggregate termination counts, and begin resumable body/asset capture.
