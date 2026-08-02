@@ -259,8 +259,7 @@ function visit(value: JsonValue, path: string, messageId: string, output: Discov
   if (!value || typeof value !== "object") return;
   const object = value as Record<string, JsonValue>;
   const contentType = optionalString(object.content_type) ?? optionalString(object.type) ?? "";
-  const rawPointer = optionalString(object.asset_pointer) ?? optionalString(object.file_id)
-    ?? (contentType.includes("asset") || contentType.includes("file") ? optionalString(object.id) : null);
+  const rawPointer = optionalString(object.asset_pointer) ?? optionalString(object.file_id);
   const dataUrl = rawPointer?.startsWith("data:") ? parseDataUrl(rawPointer) : null;
   const providerId = dataUrl ? null : providerIdFromPointer(rawPointer);
   if (providerId || dataUrl) {

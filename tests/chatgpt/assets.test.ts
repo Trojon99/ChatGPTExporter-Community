@@ -32,6 +32,34 @@ describe("ChatGPT asset discovery and content-addressed capture", () => {
     expect(JSON.stringify(assets)).not.toContain("YXVkaW8=");
   });
 
+  it("does not mistake file citations for downloadable file descriptors", () => {
+    const detail = conversationDetail();
+    detail.mapping["assistant-1"]!.message!.metadata = {
+      content_references: [
+        {
+          type: "file",
+          id: "citation-record-1",
+          name: "Referenced document",
+          source: "source-record",
+          text: "Citation text",
+          extra: { quoted: true },
+        },
+        {
+          type: "file",
+          id: "citation-record-2",
+          name: "Cloud reference",
+          source: "source-record",
+          cloud_doc_url: "https://example.invalid/private-document",
+          snippet: "Citation snippet",
+          start_idx: 0,
+          end_idx: 8,
+        },
+      ],
+    };
+
+    expect(discoverAssets(detail)).toEqual([]);
+  });
+
   it("downloads remote chunks, hashes them, and deduplicates physical files", async () => {
     const detail = conversationDetail();
     detail.mapping["user-1"]!.message!.content = {
