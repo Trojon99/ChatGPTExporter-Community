@@ -113,8 +113,14 @@ async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
 
 function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
-    if (operation.operation !== "conversation_batch") throw new Error(`unexpected ${operation.operation}`);
-    const body = [detail as unknown as JsonValue];
+    let body: JsonValue;
+    if (operation.operation === "account_artifact") {
+      body = operation.parameters.kind === "memories" ? { memories: [] } : { about_user_message: "Synthetic" };
+    } else if (operation.operation === "conversation_batch") {
+      body = [detail as unknown as JsonValue];
+    } else {
+      throw new Error(`unexpected ${operation.operation}`);
+    }
     return { requestId: "request", protocolVersion: BRIDGE_PROTOCOL_VERSION, ok: true, status: 200, body, responseBytes: JSON.stringify(body).length, correlationId: "correlation" };
   });
   return { request } as ChatGptTransport & { request: ReturnType<typeof vi.fn> };

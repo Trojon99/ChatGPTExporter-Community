@@ -10,6 +10,7 @@ import type { ChatGptTransport, DiscoveredWorkspace } from "./client";
 import { parseConversationDetail } from "./envelopes";
 import { NORMALIZER_VERSION, normalizeConversation } from "./normalize";
 import { ChatGptAssetManager } from "./assets";
+import { AccountArtifactCapture } from "./account-artifacts";
 
 export interface ConversationCompletionMarker {
   schemaVersion: 1;
@@ -36,6 +37,7 @@ export interface CaptureRunResult {
   skippedCount: number;
   failedCount: number;
   partialAssetCount: number;
+  accountArtifactStatus: "complete" | "partial" | "not_requested";
 }
 
 export interface ConversationCaptureProgress {
@@ -57,6 +59,8 @@ export class ChatGptCaptureEngine {
     now?: () => Date;
     onProgress?: (progress: ConversationCaptureProgress) => void;
     includeAssets?: boolean;
+    includeAccountArtifacts?: boolean;
+    refreshAccountArtifacts?: boolean;
   }) {
     this.now = options.now ?? (() => new Date());
   }
@@ -73,7 +77,16 @@ export class ChatGptCaptureEngine {
       skippedCount: 0,
       failedCount: 0,
       partialAssetCount: 0,
+      accountArtifactStatus: "not_requested",
     };
+    if (this.options.includeAccountArtifacts !== false) {
+      result.accountArtifactStatus = (await new AccountArtifactCapture({
+        transport: this.options.transport,
+        filesystem: this.options.filesystem,
+        workspace: this.options.workspace,
+        now: this.now,
+      }).capture(this.options.refreshAccountArtifacts === true)).status;
+    }
     const assetManager = new ChatGptAssetManager({
       transport: this.options.transport,
       filesystem: this.options.filesystem,
