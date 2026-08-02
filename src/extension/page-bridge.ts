@@ -1,5 +1,6 @@
 import { PageAuthenticationError, PageLocalAuth } from "../chatgpt/auth";
-import { resolveEndpoint } from "../chatgpt/endpoints";
+import { AssetSessionError, PageAssetSessions } from "../chatgpt/asset-session";
+import { resolveEndpoint, validateOperation } from "../chatgpt/endpoints";
 import {
   BRIDGE_PROTOCOL_VERSION,
   failureResponse,
@@ -14,6 +15,7 @@ import {
 } from "./protocol";
 
 const auth = new PageLocalAuth();
+const assetSessions = new PageAssetSessions();
 
 window.addEventListener("message", (event: MessageEvent) => {
   if (event.source !== window || event.origin !== location.origin) return;
@@ -22,7 +24,7 @@ window.addEventListener("message", (event: MessageEvent) => {
   let request: ApiRequest;
   try {
     request = parseApiRequest(data.request);
-    resolveEndpoint(request);
+    validateOperation(request);
   } catch {
     post(failureResponse(requestId(data.request), "INVALID_BRIDGE_REQUEST", "Request rejected by the page-world allowlist."));
     return;
@@ -32,7 +34,6 @@ window.addEventListener("message", (event: MessageEvent) => {
 
 async function execute(request: ApiRequest): Promise<ApiResponse> {
   const correlationId = crypto.randomUUID();
-  const endpoint = resolveEndpoint(request);
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), request.timeoutMs);
   try {
@@ -40,6 +41,13 @@ async function execute(request: ApiRequest): Promise<ApiResponse> {
       const metadata = await auth.probe(controller.signal);
       return success(request, 200, metadata, correlationId);
     }
+    if (request.operation === "asset_chunk") {
+      return success(request, 200, await assetSessions.chunk(request.parameters.handleId, request.parameters.offset, request.parameters.length, controller.signal), correlationId);
+    }
+    if (request.operation === "asset_close") {
+      return success(request, 200, assetSessions.close(request.parameters.handleId), correlationId);
+    }
+    const endpoint = resolveEndpoint(request);
     const authorization = await auth.authorizationHeaders(request.workspaceId, controller.signal);
     const response = await fetch(endpoint.path, {
       method: endpoint.method,
@@ -98,13 +106,17 @@ async function execute(request: ApiRequest): Promise<ApiResponse> {
         correlationId,
       });
     }
-    return success(request, response.status, body, correlationId, responseBytes);
+    const output = request.operation === "asset_open" ? assetSessions.open(body) : body;
+    return success(request, response.status, output, correlationId, responseBytes);
   } catch (error) {
     if (error instanceof PageAuthenticationError) {
       return failureResponse(request.requestId, error.code, error.message, {
         ...(error.status === undefined ? {} : { status: error.status }),
         correlationId,
       });
+    }
+    if (error instanceof AssetSessionError) {
+      return failureResponse(request.requestId, error.code, error.message, { retryable: error.retryable, correlationId });
     }
     const timedOut = error instanceof DOMException && error.name === "AbortError";
     return failureResponse(request.requestId, timedOut ? "REQUEST_TIMEOUT" : "NETWORK_ERROR", timedOut

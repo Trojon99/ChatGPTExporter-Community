@@ -1,5 +1,5 @@
 // Runtime shape adapted from GrokExporter commit 85922d6; requests are operation descriptors, never URLs or headers.
-import { resolveEndpoint } from "../chatgpt/endpoints";
+import { validateOperation } from "../chatgpt/endpoints";
 import { failureResponse, type ApiRequest, type ApiResponse, type FindTabResult, parseApiRequest, requestId } from "./protocol";
 
 chrome.action.onClicked.addListener(() => {
@@ -31,7 +31,7 @@ async function forwardApiRequest(tabId: unknown, value: unknown): Promise<ApiRes
   let request: ApiRequest;
   try {
     request = parseApiRequest(value);
-    resolveEndpoint(request);
+    validateOperation(request);
     if (!Number.isInteger(tabId)) throw new Error("tabId is invalid");
   } catch {
     return failureResponse(requestId(value), "INVALID_BRIDGE_REQUEST", "Request failed extension validation.");

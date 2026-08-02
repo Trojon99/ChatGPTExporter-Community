@@ -11,7 +11,9 @@ export type ChatGptOperation =
   | "conversation_batch"
   | "conversation_detail"
   | "account_artifact"
-  | "file_download_descriptor";
+  | "asset_open"
+  | "asset_chunk"
+  | "asset_close";
 
 export type ChatGptOperationParameters =
   | { operation: "session_probe"; parameters: Record<string, never> }
@@ -24,7 +26,9 @@ export type ChatGptOperationParameters =
   | { operation: "conversation_batch"; parameters: { conversationIds: string[] } }
   | { operation: "conversation_detail"; parameters: { conversationId: string } }
   | { operation: "account_artifact"; parameters: { kind: "memories" | "custom_instructions" } }
-  | { operation: "file_download_descriptor"; parameters: { fileId: string; conversationId: string | null; projectId: string | null } };
+  | { operation: "asset_open"; parameters: { fileId: string; conversationId: string | null; projectId: string | null } }
+  | { operation: "asset_chunk"; parameters: { handleId: string; offset: number; length: number } }
+  | { operation: "asset_close"; parameters: { handleId: string } };
 
 export interface ResolvedEndpoint {
   operation: ChatGptOperation;
@@ -102,7 +106,7 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
       return request.parameters.kind === "memories"
         ? endpoint("GET", "/backend-api/memories?include_memory_entries=true", true, 20_000_000, request.operation)
         : endpoint("GET", "/backend-api/user_system_messages", true, 20_000_000, request.operation);
-    case "file_download_descriptor": {
+    case "asset_open": {
       const fileId = assertIdentifier(request.parameters.fileId, "fileId");
       const conversationId = request.parameters.conversationId === null
         ? null
@@ -118,6 +122,9 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
         : new URLSearchParams({ conversation_id: conversationId, inline: "false" });
       return endpoint("GET", `/backend-api/files/download/${fileId}?${query}`, true, 5_000_000, request.operation);
     }
+    case "asset_chunk":
+    case "asset_close":
+      throw new EndpointValidationError(`${request.operation} is a page-local control operation`);
   }
 }
 
@@ -184,7 +191,7 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
         throw new EndpointValidationError("account artifact kind is invalid");
       }
       return { operation: request.operation, parameters: { kind: parameters.kind } };
-    case "file_download_descriptor":
+    case "asset_open":
       assertOnlyKeys(parameters, ["fileId", "conversationId", "projectId"]);
       return {
         operation: request.operation,
@@ -194,9 +201,38 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
           projectId: requireNullableString(parameters.projectId, "projectId"),
         },
       };
+    case "asset_chunk":
+      assertOnlyKeys(parameters, ["handleId", "offset", "length"]);
+      return {
+        operation: request.operation,
+        parameters: {
+          handleId: requireHandleId(parameters.handleId),
+          offset: requireNumber(parameters.offset, "offset"),
+          length: requireNumber(parameters.length, "length"),
+        },
+      };
+    case "asset_close":
+      assertOnlyKeys(parameters, ["handleId"]);
+      return { operation: request.operation, parameters: { handleId: requireHandleId(parameters.handleId) } };
     default:
       throw new EndpointValidationError(`unsupported operation ${request.operation}`);
   }
+}
+
+export function validateOperation(request: ChatGptOperationParameters): void {
+  if (request.operation === "asset_chunk") {
+    requireHandleId(request.parameters.handleId);
+    if (!Number.isSafeInteger(request.parameters.offset) || request.parameters.offset < 0) throw new EndpointValidationError("asset offset is invalid");
+    if (!Number.isInteger(request.parameters.length) || request.parameters.length < 1 || request.parameters.length > 1_048_576) {
+      throw new EndpointValidationError("asset chunk length must be 1-1048576");
+    }
+    return;
+  }
+  if (request.operation === "asset_close") {
+    requireHandleId(request.parameters.handleId);
+    return;
+  }
+  resolveEndpoint(request);
 }
 
 export class EndpointValidationError extends Error {
@@ -268,5 +304,10 @@ function requireNumber(value: unknown, name: string): number {
 
 function requireBoolean(value: unknown, name: string): boolean {
   if (typeof value !== "boolean") throw new EndpointValidationError(`${name} must be a boolean`);
+  return value;
+}
+
+function requireHandleId(value: unknown): string {
+  if (typeof value !== "string" || !/^[a-f0-9-]{36}$/.test(value)) throw new EndpointValidationError("asset handleId is invalid");
   return value;
 }

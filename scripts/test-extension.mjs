@@ -62,6 +62,29 @@ const server = https.createServer({
     }));
     return;
   }
+  if (requestUrl.pathname === "/backend-api/files/download/file-1") {
+    const signedQuery = `${["s", "ig"].join("")}=synthetic-signed-value`;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      download_url: `https://chatgpt.com:${server.address().port}/asset-bytes?${signedQuery}`,
+      mime_type: "text/plain",
+      size: 21,
+    }));
+    return;
+  }
+  if (requestUrl.pathname === "/asset-bytes") {
+    const bytes = Buffer.from("synthetic asset bytes");
+    const match = /^bytes=(\d+)-(\d+)$/.exec(request.headers.range ?? "");
+    const start = match ? Number(match[1]) : 0;
+    const end = match ? Math.min(Number(match[2]), bytes.length - 1) : bytes.length - 1;
+    response.writeHead(match ? 206 : 200, {
+      "Content-Type": "text/plain",
+      "Content-Length": String(end - start + 1),
+      ...(match ? { "Content-Range": `bytes ${start}-${end}/${bytes.length}` } : {}),
+    });
+    response.end(bytes.subarray(start, end + 1));
+    return;
+  }
   response.writeHead(200, { "Content-Type": "text/html" });
   response.end("<!doctype html><title>Synthetic ChatGPT</title><main>Fixture</main>");
 });
@@ -158,6 +181,47 @@ try {
   }), { tabId: tab.tabId });
   assert(!rateLimited.ok && rateLimited.error?.code === "RATE_LIMITED" && rateLimited.error?.retryAfterMs === 2_000, "Rate-limit metadata was not preserved.");
   assert(!JSON.stringify(rateLimited).includes("must-not-cross-error-boundary"), "HTTP error response body crossed the redacted bridge boundary.");
+
+  const assetOpen = await dashboard.evaluate(async ({ tabId }) => chrome.runtime.sendMessage({
+    type: "CHATGPT_EXPORTER_API_REQUEST",
+    tabId,
+    request: {
+      requestId: "asset-open",
+      protocolVersion: 1,
+      workspaceId: null,
+      operation: "asset_open",
+      parameters: { fileId: "file-1", conversationId: "conversation-1", projectId: null },
+      timeoutMs: 10_000,
+    },
+  }), { tabId: tab.tabId });
+  assert(assetOpen.ok && typeof assetOpen.body?.handleId === "string", `Asset handle open failed: ${JSON.stringify(assetOpen)}`);
+  assert(!JSON.stringify(assetOpen).includes("synthetic-signed-value"), "Signed asset URL crossed the page-world bridge.");
+  const assetChunk = await dashboard.evaluate(async ({ tabId, handleId }) => chrome.runtime.sendMessage({
+    type: "CHATGPT_EXPORTER_API_REQUEST",
+    tabId,
+    request: {
+      requestId: "asset-chunk",
+      protocolVersion: 1,
+      workspaceId: null,
+      operation: "asset_chunk",
+      parameters: { handleId, offset: 0, length: 1024 },
+      timeoutMs: 10_000,
+    },
+  }), { tabId: tab.tabId, handleId: assetOpen.body.handleId });
+  assert(assetChunk.ok && assetChunk.body?.eof && atob(assetChunk.body.dataBase64) === "synthetic asset bytes", "Chunked asset bytes were not returned correctly.");
+  const assetClose = await dashboard.evaluate(async ({ tabId, handleId }) => chrome.runtime.sendMessage({
+    type: "CHATGPT_EXPORTER_API_REQUEST",
+    tabId,
+    request: {
+      requestId: "asset-close",
+      protocolVersion: 1,
+      workspaceId: null,
+      operation: "asset_close",
+      parameters: { handleId },
+      timeoutMs: 10_000,
+    },
+  }), { tabId: tab.tabId, handleId: assetOpen.body.handleId });
+  assert(assetClose.ok && assetClose.body?.closed, "Asset handle did not close.");
 
   await dashboard.locator("#find-chatgpt").click();
   await dashboard.locator("#workspace-select:not([disabled])").waitFor();

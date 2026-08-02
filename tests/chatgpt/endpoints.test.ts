@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EndpointValidationError, parseOperationRequest, resolveEndpoint } from "../../src/chatgpt/endpoints";
+import { EndpointValidationError, parseOperationRequest, resolveEndpoint, validateOperation } from "../../src/chatgpt/endpoints";
 import { BRIDGE_PROTOCOL_VERSION, parseApiRequest } from "../../src/extension/protocol";
 
 describe("ChatGPT endpoint allowlist", () => {
@@ -36,13 +36,17 @@ describe("ChatGPT endpoint allowlist", () => {
     expect(resolveEndpoint({ operation: "account_artifact", parameters: { kind: "memories" } }).path)
       .toBe("/backend-api/memories?include_memory_entries=true");
     expect(resolveEndpoint({
-      operation: "file_download_descriptor",
+      operation: "asset_open",
       parameters: { fileId: "file-1", conversationId: "conversation-1", projectId: null },
     }).path).toBe("/backend-api/files/download/file-1?conversation_id=conversation-1&inline=false");
     expect(() => resolveEndpoint({
-      operation: "file_download_descriptor",
+      operation: "asset_open",
       parameters: { fileId: "file-1", conversationId: null, projectId: null },
     })).toThrow("exactly one");
+    const handleId = "00000000-0000-4000-8000-000000000000";
+    expect(() => validateOperation({ operation: "asset_chunk", parameters: { handleId, offset: 0, length: 1_048_576 } })).not.toThrow();
+    expect(() => validateOperation({ operation: "asset_chunk", parameters: { handleId, offset: 0, length: 1_048_577 } })).toThrow("chunk length");
+    expect(() => validateOperation({ operation: "asset_close", parameters: { handleId: "../../private" } })).toThrow("handleId");
   });
 
   it("rejects arbitrary paths, methods, bodies, headers, and extra parameters structurally", () => {
