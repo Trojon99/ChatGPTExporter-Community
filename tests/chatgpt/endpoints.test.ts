@@ -31,6 +31,12 @@ describe("ChatGPT endpoint allowlist", () => {
   });
 
   it("constructs shared, account-artifact, and file descriptor adapters without arbitrary URLs", () => {
+    expect(resolveEndpoint({ operation: "project_conversation_page", parameters: { projectId: "project-1", cursor: "0" } }).path)
+      .toBe("/backend-api/gizmos/project-1/conversations?cursor=0");
+    expect(() => parseOperationRequest({
+      operation: "project_conversation_page",
+      parameters: { projectId: "project-1", cursor: "0", limit: 100 },
+    })).toThrow("unexpected parameters");
     expect(resolveEndpoint({ operation: "shared_page", parameters: { offset: 100, limit: 100 } }).path)
       .toBe("/backend-api/shared_conversations?order=updated&limit=100&offset=100");
     expect(resolveEndpoint({ operation: "account_artifact", parameters: { kind: "memories" } }).path)

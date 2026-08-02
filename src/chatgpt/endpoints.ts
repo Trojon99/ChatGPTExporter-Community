@@ -20,7 +20,7 @@ export type ChatGptOperationParameters =
   | { operation: "accounts_list"; parameters: Record<string, never> }
   | { operation: "conversation_page"; parameters: { offset: number; limit: number; archived: boolean } }
   | { operation: "project_page"; parameters: { cursor: string | null } }
-  | { operation: "project_conversation_page"; parameters: { projectId: string; cursor: string | null; limit: number } }
+  | { operation: "project_conversation_page"; parameters: { projectId: string; cursor: string } }
   | { operation: "shared_page"; parameters: { offset: number; limit: number } }
   | { operation: "shared_detail"; parameters: { shareId: string } }
   | { operation: "conversation_batch"; parameters: { conversationIds: string[] } }
@@ -68,9 +68,7 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
     }
     case "project_conversation_page": {
       const projectId = assertIdentifier(request.parameters.projectId, "projectId");
-      assertLimit(request.parameters.limit);
-      const query = new URLSearchParams({ limit: String(request.parameters.limit) });
-      if (request.parameters.cursor !== null) query.set("cursor", assertCursor(request.parameters.cursor));
+      const query = new URLSearchParams({ cursor: assertCursor(request.parameters.cursor) });
       return endpoint("GET", `/backend-api/gizmos/${projectId}/conversations?${query}`, true, 20_000_000, request.operation);
     }
     case "shared_page": {
@@ -157,13 +155,12 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
       assertOnlyKeys(parameters, ["cursor"]);
       return { operation: request.operation, parameters: { cursor: requireNullableString(parameters.cursor, "cursor") } };
     case "project_conversation_page":
-      assertOnlyKeys(parameters, ["projectId", "cursor", "limit"]);
+      assertOnlyKeys(parameters, ["projectId", "cursor"]);
       return {
         operation: request.operation,
         parameters: {
           projectId: requireString(parameters.projectId, "projectId"),
-          cursor: requireNullableString(parameters.cursor, "cursor"),
-          limit: requireNumber(parameters.limit, "limit"),
+          cursor: requireString(parameters.cursor, "cursor"),
         },
       };
     case "shared_page":

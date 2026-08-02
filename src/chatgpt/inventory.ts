@@ -209,13 +209,13 @@ export class ChatGptInventoryEngine {
     const chainId = `project-${project.projectId}`;
     const seenIds = new Set<string>();
     const seenCursors = new Set<string>();
-    let cursor: string | null = null;
+    let cursor = "0";
     let totalItems = 0;
 
     for (let pageNumber = 1; pageNumber <= this.options.settings.maxPagesPerChain; pageNumber += 1) {
       const response = await this.request({
         operation: "project_conversation_page",
-        parameters: { projectId: project.projectId, cursor, limit: this.options.settings.pageSize },
+        parameters: { projectId: project.projectId, cursor },
       });
       const object = requireObject(response.body, `project ${project.projectId} conversation page`);
       const items = requireObjectArray(object.items, `project ${project.projectId} conversation page.items`);
@@ -230,7 +230,7 @@ export class ChatGptInventoryEngine {
       const nextCursor = optionalCursor(object.cursor, `project ${project.projectId} page.cursor`);
       if (items.length === 0 && nextCursor !== null) throw new InventoryError("INVENTORY_PREMATURE_EMPTY_PAGE", `Project ${project.projectId} returned an empty conversation page with another cursor.`);
       const termination = nextCursor === null ? "cursor_exhausted" as const : null;
-      await this.recordPage("project", chainId, pageNumber, { ...(cursor === null ? {} : { cursor }), projectId: project.projectId, limit: this.options.settings.pageSize }, nextCursor, items.length, response.responseBytes, response.body, await hashIds(ids), duplicateCount, termination);
+      await this.recordPage("project", chainId, pageNumber, { cursor, projectId: project.projectId }, nextCursor, items.length, response.responseBytes, response.body, await hashIds(ids), duplicateCount, termination);
       this.report("project", chainId, pageNumber);
       if (nextCursor === null) {
         this.chains.push({ ...chain(chainId, "project", pageNumber, totalItems, seenIds.size, "cursor_exhausted"), projectId: project.projectId });
