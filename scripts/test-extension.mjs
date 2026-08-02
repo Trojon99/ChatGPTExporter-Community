@@ -41,6 +41,34 @@ const server = https.createServer({
       response.end(JSON.stringify({ private_fixture_body: "must-not-cross-error-boundary" }));
       return;
     }
+    if (requestUrl.searchParams.get("offset") === "43") {
+      response.writeHead(403, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ private_fixture_body: "forbidden-body-must-not-cross" }));
+      return;
+    }
+    if (requestUrl.searchParams.get("offset") === "44") {
+      response.writeHead(503, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ private_fixture_body: "server-body-must-not-cross" }));
+      return;
+    }
+    if (requestUrl.searchParams.get("offset") === "45") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end("{invalid-json");
+      return;
+    }
+    if (requestUrl.searchParams.get("offset") === "46") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify("x".repeat(20_000_001)));
+      return;
+    }
+    if (requestUrl.searchParams.get("offset") === "47") {
+      setTimeout(() => {
+        if (response.destroyed) return;
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ items: [], total: 0, offset: 47, limit: 1 }));
+      }, 2_000);
+      return;
+    }
     const authorized = request.headers.authorization === "Bearer synthetic-page-local-secret"
       && request.headers["x-authorization"] === "Bearer synthetic-page-local-secret";
     setTimeout(() => {
@@ -202,6 +230,29 @@ try {
   }), { tabId: tab.tabId });
   assert(!rateLimited.ok && rateLimited.error?.code === "RATE_LIMITED" && rateLimited.error?.retryAfterMs === 2_000, "Rate-limit metadata was not preserved.");
   assert(!JSON.stringify(rateLimited).includes("must-not-cross-error-boundary"), "HTTP error response body crossed the redacted bridge boundary.");
+
+  for (const failure of [
+    { offset: 43, code: "WORKSPACE_FORBIDDEN", retryable: false, secret: "forbidden-body-must-not-cross" },
+    { offset: 44, code: "CHATGPT_HTTP_ERROR", retryable: true, secret: "server-body-must-not-cross" },
+    { offset: 45, code: "INVALID_JSON_RESPONSE", retryable: false },
+    { offset: 46, code: "RESPONSE_TOO_LARGE", retryable: false },
+    { offset: 47, code: "REQUEST_TIMEOUT", retryable: true, timeoutMs: 1_000 },
+  ]) {
+    const result = await dashboard.evaluate(async ({ tabId, failure }) => chrome.runtime.sendMessage({
+      type: "CHATGPT_EXPORTER_API_REQUEST",
+      tabId,
+      request: {
+        requestId: `failure-${failure.offset}`,
+        protocolVersion: 1,
+        workspaceId: null,
+        operation: "conversation_page",
+        parameters: { offset: failure.offset, limit: 1, archived: false },
+        timeoutMs: failure.timeoutMs ?? 10_000,
+      },
+    }), { tabId: tab.tabId, failure });
+    assert(!result.ok && result.error?.code === failure.code && result.error?.retryable === failure.retryable, `Failure contract ${failure.code} was not preserved.`);
+    assert(!failure.secret || !JSON.stringify(result).includes(failure.secret), `Private ${failure.code} response crossed the bridge.`);
+  }
 
   const assetOpen = await dashboard.evaluate(async ({ tabId }) => chrome.runtime.sendMessage({
     type: "CHATGPT_EXPORTER_API_REQUEST",
