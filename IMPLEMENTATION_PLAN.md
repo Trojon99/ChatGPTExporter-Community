@@ -1,6 +1,6 @@
 # ChatGPTExporter implementation plan
 
-Status: active
+Status: standalone accepted; consolidation active
 Started: 2026-08-01
 Goal: export and independently verify every conversation exposed by all accessible ChatGPT web-history scopes without moving authentication secrets outside the authenticated page, then consolidate the proven ChatGPT and Grok implementations behind a shared core with separate least-privilege extension packages.
 
@@ -750,7 +750,7 @@ Agents must update the progress journal, decision log, and lessons after each me
 - [x] Reach zero unresolved conversation failures and document any irretrievable asset exceptions.
 - [x] Run set/hash/graph/asset reconciliation, unchanged-repeat verification, and category-based manual UI sampling.
 - [x] Import into the unified archive, prove unchanged reimport creates zero versions, and run sanitized search probes.
-- [ ] Commit aggregate-only acceptance evidence and tag the accepted standalone release.
+- [x] Commit aggregate-only acceptance evidence and tag the accepted standalone release.
 
 #### Phase CG-G — one shared source tree, separate safe releases
 
@@ -920,3 +920,8 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Before storage cleanup, the newest recovery set verified with SQLite integrity `ok`. Four exact rebuildable staging targets from earlier recovery, native-import, and CASS work were removed, increasing free space from roughly 16 GiB to 38 GiB without deleting blobs, snapshots, backups, portable records, incoming evidence, acknowledgements, or quarantine. The superseded failed selective batch remains recoverably quarantined.
 - Flywheel CASS now reports initialized, healthy, ready, fresh, complete search coverage, zero quarantined conversations, and zero warnings. Sanitized lexical probes for `ChatGPT`, `OpenAI`, `Python`, and `Markdown` returned only `chatgpt-web` hits, and every sampled hit carried logical-conversation and raw provenance.
 - Next: commit this aggregate-only record, tag the accepted standalone `0.1.6` revision, reverify the Grok baseline, and begin Phase CG-G consolidation without changing provider behavior.
+
+### 2026-08-02 — Standalone acceptance tagged
+
+- The aggregate-only acceptance record and complete `0.1.6` source are tagged `v0.1.6`; Phase CG-F is complete. No private archive path, account identifier, conversation identifier, title, body, asset name, credential, signed URL, or browser state is present in the tag.
+- Next: reverify and tag the accepted Grok baseline, then create the consolidated source tree and port both accepted provider implementations behind compatibility evidence.
