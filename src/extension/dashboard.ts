@@ -2,6 +2,8 @@ import { ChatGptClient, type DiscoveredWorkspace } from "../chatgpt/client";
 import { DirectoryArchiveFileSystem } from "../core/filesystem";
 import { DEFAULT_INVENTORY_SETTINGS, runWorkspaceInventories } from "../chatgpt/inventory";
 import { ChatGptCaptureEngine } from "../chatgpt/capture-engine";
+import { auditArchive, type ArchiveAuditReport } from "../chatgpt/audit";
+import { ControlledTransport } from "../core/request-control";
 import { ensureDirectoryPermission, loadDirectoryHandle, saveDirectoryHandle } from "./handle-store";
 import { BridgeResponseError, RuntimeApiTransport, type FindTabResult } from "./protocol";
 
@@ -11,10 +13,21 @@ const findButton = element<HTMLButtonElement>("find-chatgpt");
 const preflightButton = element<HTMLButtonElement>("preflight-workspace");
 const inventoryButton = element<HTMLButtonElement>("run-inventory");
 const captureButton = element<HTMLButtonElement>("run-capture");
+const confirmInventoryButton = element<HTMLButtonElement>("confirm-inventory");
+const revalidateButton = element<HTMLButtonElement>("revalidate");
+const pauseButton = element<HTMLButtonElement>("pause-run");
+const resumeButton = element<HTMLButtonElement>("resume-run");
+const cancelButton = element<HTMLButtonElement>("cancel-run");
 const workspaceSelect = element<HTMLSelectElement>("workspace-select");
 const archivedScope = element<HTMLInputElement>("scope-archived");
 const projectScope = element<HTMLInputElement>("scope-projects");
 const sharedScope = element<HTMLInputElement>("scope-shared");
+const accountScope = element<HTMLInputElement>("scope-account");
+const assetScope = element<HTMLInputElement>("scope-assets");
+const requestDelay = element<HTMLInputElement>("request-delay");
+const requestConcurrency = element<HTMLInputElement>("request-concurrency");
+const batchSize = element<HTMLInputElement>("batch-size");
+const inventorySummary = element<HTMLElement>("inventory-summary");
 const directoryLabel = element<HTMLElement>("directory-label");
 const status = element<HTMLElement>("status");
 const log = element<HTMLElement>("log");
@@ -24,6 +37,8 @@ let client: ChatGptClient | undefined;
 let runtimeTransport: RuntimeApiTransport | undefined;
 let workspaces: DiscoveredWorkspace[] = [];
 let verifiedWorkspaces: DiscoveredWorkspace[] = [];
+let inventoryConfirmed = false;
+let activeController: ControlledTransport | undefined;
 
 chooseButton.addEventListener("click", () => void chooseDirectory());
 openButton.addEventListener("click", () => void chrome.tabs.create({ url: "https://chatgpt.com/" }));
@@ -31,11 +46,26 @@ findButton.addEventListener("click", () => void findTabAndWorkspaces());
 preflightButton.addEventListener("click", () => void preflightWorkspace());
 inventoryButton.addEventListener("click", () => void runInventory());
 captureButton.addEventListener("click", () => void runCapture());
+confirmInventoryButton.addEventListener("click", confirmInventory);
+revalidateButton.addEventListener("click", () => void revalidateArchives());
+pauseButton.addEventListener("click", () => activeController?.pause());
+resumeButton.addEventListener("click", () => activeController?.resume());
+cancelButton.addEventListener("click", () => activeController?.cancel());
+[archivedScope, projectScope, sharedScope].forEach((scope) => scope.addEventListener("change", () => {
+  inventoryConfirmed = false;
+  confirmInventoryButton.disabled = true;
+  captureButton.disabled = true;
+  revalidateButton.disabled = true;
+  inventorySummary.textContent = "Scope selection changed. Build and confirm a fresh inventory before capture.";
+}));
 workspaceSelect.addEventListener("change", () => {
   verifiedWorkspaces = [];
   chooseButton.disabled = true;
   inventoryButton.disabled = true;
   captureButton.disabled = true;
+  confirmInventoryButton.disabled = true;
+  revalidateButton.disabled = true;
+  inventoryConfirmed = false;
   preflightButton.disabled = workspaceSelect.selectedOptions.length === 0;
   directoryLabel.textContent = workspaceSelect.selectedOptions.length ? "Verify selected workspaces first" : "Select one or more workspaces first";
 });
@@ -43,6 +73,10 @@ void restoreDirectory();
 
 async function restoreDirectory(): Promise<void> {
   directoryHandle = await loadDirectoryHandle();
+  if (directoryHandle) {
+    const granted = await ensureDirectoryPermission(directoryHandle, false);
+    directoryLabel.textContent = granted ? `${directoryHandle.name} (permission retained)` : `${directoryHandle.name} (permission required)`;
+  }
 }
 
 async function chooseDirectory(): Promise<void> {
@@ -57,6 +91,9 @@ async function chooseDirectory(): Promise<void> {
     directoryLabel.textContent = selectedHandle.name;
     inventoryButton.disabled = false;
     captureButton.disabled = true;
+    confirmInventoryButton.disabled = true;
+    revalidateButton.disabled = true;
+    inventoryConfirmed = false;
     setStatus(`${verifiedWorkspaces.length} workspace${verifiedWorkspaces.length === 1 ? " is" : "s are"} ready for isolated inventory directories.`, "ready");
   } catch (error) {
     if (!(error instanceof DOMException && error.name === "AbortError")) showError(error);
@@ -150,6 +187,9 @@ function resetWorkspaceSelection(): void {
   chooseButton.disabled = true;
   inventoryButton.disabled = true;
   captureButton.disabled = true;
+  confirmInventoryButton.disabled = true;
+  revalidateButton.disabled = true;
+  inventoryConfirmed = false;
   directoryLabel.textContent = "Verify a workspace first";
 }
 
@@ -163,17 +203,24 @@ async function runInventory(): Promise<void> {
     return;
   }
   setBusy(inventoryButton, true);
+  inventoryConfirmed = false;
+  confirmInventoryButton.disabled = true;
+  captureButton.disabled = true;
+  revalidateButton.disabled = true;
   chooseButton.disabled = true;
   workspaceSelect.disabled = true;
   preflightButton.disabled = true;
   setStatus("Building complete inventory; conversation bodies are not being downloaded yet…", "busy");
   try {
+    const controlled = createControlledTransport(runtimeTransport);
+    activeController = controlled;
+    setRunControls(true);
     const targets = await Promise.all(verifiedWorkspaces.map(async (workspace) => ({
       workspace,
       filesystem: new DirectoryArchiveFileSystem(await directoryHandle!.getDirectoryHandle(`ChatGPTExport-${workspace.workspaceFingerprint}`, { create: true })),
     })));
     const inventories = await runWorkspaceInventories({
-      transport: runtimeTransport,
+      transport: controlled,
       targets,
       settings: {
         ...DEFAULT_INVENTORY_SETTINGS,
@@ -187,12 +234,18 @@ async function runInventory(): Promise<void> {
     });
     const conversationCount = [...inventories.values()].reduce((sum, inventory) => sum + inventory.conversations.length, 0);
     const pageCount = [...inventories.values()].reduce((sum, inventory) => sum + inventory.pages.length, 0);
+    const projectCount = [...inventories.values()].reduce((sum, inventory) => sum + (inventory.projects?.length ?? 0), 0);
+    const responseBytes = [...inventories.values()].flatMap((inventory) => inventory.pages).reduce((sum, page) => sum + page.responseBytes, 0);
     setStatus(`Inventory complete: ${conversationCount} workspace-scoped conversations across ${inventories.size} isolated archives.`, "ready");
-    log.textContent = `Published each inventory and reconciliation report after ${pageCount} raw page artifacts were written. Conversation capture is ready.`;
-    captureButton.disabled = false;
+    inventorySummary.textContent = `${conversationCount} conversations, ${projectCount} projects, ${pageCount} raw listing pages, ${formatBytes(responseBytes)} of listing responses. Review these aggregate counts, then confirm.`;
+    log.textContent = "Every enabled inventory chain terminated normally and its reconciliation report was published. Confirmation is required before body capture.";
+    confirmInventoryButton.disabled = false;
+    revalidateButton.disabled = false;
   } catch (error) {
     showError(error);
   } finally {
+    activeController = undefined;
+    setRunControls(false);
     inventoryButton.disabled = false;
     chooseButton.disabled = false;
     workspaceSelect.disabled = false;
@@ -201,7 +254,7 @@ async function runInventory(): Promise<void> {
 }
 
 async function runCapture(): Promise<void> {
-  if (verifiedWorkspaces.length === 0 || !directoryHandle || !runtimeTransport) {
+  if (verifiedWorkspaces.length === 0 || !directoryHandle || !runtimeTransport || !inventoryConfirmed) {
     setStatus("Complete workspace preflight, destination selection, and inventory first.", "error");
     return;
   }
@@ -217,15 +270,24 @@ async function runCapture(): Promise<void> {
   let captured = 0;
   let rebuilt = 0;
   let skipped = 0;
+  let failures = 0;
+  let partialAssets = 0;
+  const audits: ArchiveAuditReport[] = [];
   try {
+    const controlled = createControlledTransport(runtimeTransport);
+    activeController = controlled;
+    setRunControls(true);
     for (const workspace of verifiedWorkspaces) {
       const archive = await directoryHandle.getDirectoryHandle(`ChatGPTExport-${workspace.workspaceFingerprint}`, { create: true });
       const runId = `capture-${Date.now()}-${crypto.randomUUID()}`;
       const result = await new ChatGptCaptureEngine({
-        transport: runtimeTransport,
+        transport: controlled,
         filesystem: new DirectoryArchiveFileSystem(archive),
         workspace,
         runId,
+        batchSize: integerValue(batchSize, 1, 10),
+        includeAssets: assetScope.checked,
+        includeAccountArtifacts: accountScope.checked,
         onProgress: (progress) => {
           setStatus(`Capturing ${workspace.workspaceFingerprint.slice(0, 8)}…: ${progress.completed}/${progress.total} complete (${progress.phase})…`, "busy");
         },
@@ -233,18 +295,96 @@ async function runCapture(): Promise<void> {
       captured += result.capturedCount;
       rebuilt += result.rebuiltCount;
       skipped += result.skippedCount;
+      failures += result.failedCount;
+      partialAssets += result.partialAssetCount + result.partialProjectAssetCount;
+      audits.push(await auditArchive({ filesystem: new DirectoryArchiveFileSystem(archive), extensionVersion: chrome.runtime.getManifest().version }));
     }
-    setStatus(`Conversation capture complete: ${captured} fetched, ${rebuilt} rebuilt from raw, ${skipped} unchanged.`, "ready");
-    log.textContent = "Every inventory record has a hash-validated completion marker. Referenced asset download is the next implementation gate.";
+    const terminal = combineAuditState(audits);
+    setStatus(`Capture ${terminal}: ${captured} fetched, ${rebuilt} rebuilt, ${skipped} unchanged, ${failures} failed, ${partialAssets} partial asset scopes.`, terminal === "complete" ? "complete" : terminal === "conversations complete / assets partial" ? "partial" : "error");
+    log.textContent = "Independent set/hash/graph/asset validation was written to reports/validation.md and reports/validation.json. Run Revalidate only after moving or inspecting the archive; rerun capture to retry incomplete records.";
+    revalidateButton.disabled = false;
   } catch (error) {
     showError(error);
   } finally {
+    activeController = undefined;
+    setRunControls(false);
     captureButton.disabled = false;
     inventoryButton.disabled = false;
     chooseButton.disabled = false;
     workspaceSelect.disabled = false;
     preflightButton.disabled = false;
   }
+}
+
+function confirmInventory(): void {
+  inventoryConfirmed = true;
+  captureButton.disabled = false;
+  confirmInventoryButton.disabled = true;
+  setStatus("Inventory confirmed. Capture can start or resume from existing completion markers.", "ready");
+}
+
+async function revalidateArchives(): Promise<void> {
+  if (verifiedWorkspaces.length === 0 || !directoryHandle) {
+    setStatus("Verify the workspaces and restore their archive-directory permission first.", "error");
+    return;
+  }
+  setBusy(revalidateButton, true);
+  try {
+    const reports: ArchiveAuditReport[] = [];
+    for (const workspace of verifiedWorkspaces) {
+      const archive = await directoryHandle.getDirectoryHandle(`ChatGPTExport-${workspace.workspaceFingerprint}`);
+      reports.push(await auditArchive({ filesystem: new DirectoryArchiveFileSystem(archive), extensionVersion: chrome.runtime.getManifest().version }));
+    }
+    const terminal = combineAuditState(reports);
+    const conversations = reports.reduce((sum, report) => sum + report.completeConversationCount, 0);
+    const bytes = reports.reduce((sum, report) => sum + report.archiveBytes, 0);
+    setStatus(`Revalidation ${terminal}: ${conversations} complete conversations and ${formatBytes(bytes)} audited.`, terminal === "complete" ? "complete" : terminal.includes("partial") ? "partial" : "error");
+    log.textContent = "No provider requests were made. Current validation reports and import indexes were rebuilt from local archive bytes.";
+  } catch (error) {
+    showError(error);
+  } finally {
+    setBusy(revalidateButton, false);
+  }
+}
+
+function createControlledTransport(transport: RuntimeApiTransport): ControlledTransport {
+  return new ControlledTransport(transport, {
+    delayMs: integerValue(requestDelay, 0, 60_000),
+    maxConcurrency: integerValue(requestConcurrency, 1, 8),
+    onState: (state) => {
+      if (state === "paused") setStatus("Paused. The active request may finish; no next request will start until Resume.", "paused");
+      pauseButton.disabled = state !== "running";
+      resumeButton.disabled = state !== "paused";
+    },
+  });
+}
+
+function setRunControls(running: boolean): void {
+  pauseButton.disabled = !running;
+  resumeButton.disabled = true;
+  cancelButton.disabled = !running;
+  requestDelay.disabled = running;
+  requestConcurrency.disabled = running;
+  batchSize.disabled = running;
+}
+
+function integerValue(input: HTMLInputElement, minimum: number, maximum: number): number {
+  const value = Number(input.value);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) throw new Error(`${input.id} must be ${minimum}-${maximum}.`);
+  return value;
+}
+
+function combineAuditState(reports: ArchiveAuditReport[]): "complete" | "conversations complete / assets partial" | "incomplete" {
+  if (reports.some((report) => report.terminalState === "incomplete")) return "incomplete";
+  if (reports.some((report) => report.terminalState === "conversations_complete_assets_partial")) return "conversations complete / assets partial";
+  return "complete";
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1_024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(1)} KiB`;
+  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MiB`;
+  return `${(bytes / 1_073_741_824).toFixed(2)} GiB`;
 }
 
 function option(value: string, text: string): HTMLOptionElement {
@@ -265,6 +405,10 @@ function setStatus(message: string, state: string): void {
 }
 
 function showError(error: unknown): void {
+  if (error instanceof BridgeResponseError && error.code === "AUTHENTICATION_REQUIRED") {
+    setStatus("Authentication required. Sign in or refresh the normal ChatGPT tab, then find and verify it again; completed local work is preserved.", "error");
+    return;
+  }
   setStatus(error instanceof Error ? error.message : String(error), "error");
 }
 

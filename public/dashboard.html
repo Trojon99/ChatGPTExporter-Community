@@ -32,7 +32,7 @@
 
       <section class="panel workspace-panel">
         <div>
-          <h2>2. Select one workspace</h2>
+          <h2>2. Select workspaces</h2>
           <p>Personal and managed workspaces have separate histories. Each selected workspace is exported and verified independently.</p>
         </div>
         <div class="workspace-controls">
@@ -63,16 +63,44 @@
           <label><input id="scope-archived" type="checkbox" checked> Archived</label>
           <label><input id="scope-projects" type="checkbox" checked> Projects</label>
           <label><input id="scope-shared" type="checkbox" checked> Shared</label>
+          <label><input id="scope-account" type="checkbox" checked> Account artifacts</label>
+          <label><input id="scope-assets" type="checkbox" checked> Assets</label>
         </fieldset>
         <button id="run-inventory" type="button" disabled>Build inventory</button>
       </section>
 
+      <section class="panel confirmation-panel">
+        <div>
+          <h2>5. Confirm inventory</h2>
+          <p id="inventory-summary">Build an inventory first. Capture stays locked until you confirm its aggregate counts and scope termination.</p>
+        </div>
+        <button id="confirm-inventory" type="button" disabled>Confirm inventory</button>
+      </section>
+
       <section class="panel capture-panel">
         <div>
-          <h2>5. Capture conversation bodies</h2>
+          <h2>6. Capture, resume, and verify</h2>
           <p>Batch responses are reconciled against inventory, suspicious records fall back to single detail, and every raw revision is hashed before normalized output is published.</p>
         </div>
-        <button id="run-capture" type="button" disabled>Capture conversations</button>
+        <div class="capture-actions">
+          <button id="run-capture" type="button" disabled>Start / resume capture</button>
+          <button id="revalidate" class="secondary" type="button" disabled>Revalidate only</button>
+        </div>
+      </section>
+
+      <section class="panel controls-panel">
+        <div>
+          <h2>Request controls</h2>
+          <p>Pause and cancel take effect before the next provider request. Completed files and journals remain resumable.</p>
+        </div>
+        <label>Delay (ms)<input id="request-delay" type="number" min="0" max="60000" step="50" value="250"></label>
+        <label>Concurrency<input id="request-concurrency" type="number" min="1" max="8" step="1" value="1"></label>
+        <label>Batch size<input id="batch-size" type="number" min="1" max="10" step="1" value="10"></label>
+        <div class="actions">
+          <button id="pause-run" class="secondary" type="button" disabled>Pause</button>
+          <button id="resume-run" class="secondary" type="button" disabled>Resume</button>
+          <button id="cancel-run" class="danger" type="button" disabled>Cancel</button>
+        </div>
       </section>
 
       <section class="panel run-panel">

@@ -13,6 +13,8 @@ const extensionPath = path.join(root, "dist", "extension");
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "chatgpt-exporter-e2e-"));
 const certificatePath = path.join(temporaryRoot, "certificate.pem");
 const keyPath = path.join(temporaryRoot, "key.pem");
+let conversationListingRequests = 0;
+let batchRequests = 0;
 execFileSync("openssl", [
   "req", "-x509", "-newkey", "rsa:2048", "-nodes",
   "-keyout", keyPath,
@@ -33,6 +35,7 @@ const server = https.createServer({
     return;
   }
   if (requestUrl.pathname === "/backend-api/conversations") {
+    conversationListingRequests += 1;
     if (requestUrl.searchParams.get("offset") === "42") {
       response.writeHead(429, { "Content-Type": "application/json", "Retry-After": "2" });
       response.end(JSON.stringify({ private_fixture_body: "must-not-cross-error-boundary" }));
@@ -40,13 +43,31 @@ const server = https.createServer({
     }
     const authorized = request.headers.authorization === "Bearer synthetic-page-local-secret"
       && request.headers["x-authorization"] === "Bearer synthetic-page-local-secret";
-    response.writeHead(authorized ? 200 : 401, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(authorized ? {
-      items: [{ id: "conversation-1", title: "Synthetic", create_time: 1, update_time: 2 }],
-      total: 1,
-      offset: 0,
-      limit: 1,
-    } : { error: "fixture rejected request" }));
+    setTimeout(() => {
+      response.writeHead(authorized ? 200 : 401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(authorized ? {
+        items: [
+          { id: "conversation-1", title: "Synthetic one", create_time: 1, update_time: 2 },
+          { id: "conversation-2", title: "Synthetic two", create_time: 3, update_time: 4 },
+        ],
+        total: 2,
+        offset: Number(requestUrl.searchParams.get("offset") ?? 0),
+        limit: Number(requestUrl.searchParams.get("limit") ?? 100),
+      } : { error: "fixture rejected request" }));
+    }, 75);
+    return;
+  }
+  if (requestUrl.pathname === "/backend-api/conversations/batch") {
+    batchRequests += 1;
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const ids = JSON.parse(body).conversation_ids;
+      setTimeout(() => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(ids.map(syntheticConversation)));
+      }, 75);
+    });
     return;
   }
   if (requestUrl.pathname === "/backend-api/accounts/check/v4-2023-04-27") {
@@ -230,7 +251,47 @@ try {
   await dashboard.locator("#preflight-workspace").click();
   await dashboard.locator("#choose-directory:not([disabled])").waitFor();
   assert((await dashboard.locator("#status").textContent())?.includes("Verified 1 selected workspace"), "Dashboard preflight did not reach the verified state.");
-  console.log("Chromium page-local authentication and allowlisted bridge test passed.");
+
+  await dashboard.evaluate(() => {
+    Object.defineProperty(window, "showDirectoryPicker", {
+      configurable: true,
+      value: async () => navigator.storage.getDirectory(),
+    });
+  });
+  await dashboard.locator("#choose-directory").click();
+  await dashboard.locator("#run-inventory:not([disabled])").waitFor();
+  await dashboard.locator("#scope-projects").uncheck();
+  await dashboard.locator("#scope-shared").uncheck();
+  await dashboard.locator("#request-delay").fill("100");
+  const listingRequestsBeforeInventory = conversationListingRequests;
+  await dashboard.locator("#run-inventory").click();
+  await dashboard.locator("#pause-run:not([disabled])").click();
+  await dashboard.locator('#status[data-state="paused"]').waitFor();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert(conversationListingRequests === listingRequestsBeforeInventory + 1, "Pause allowed the next inventory request to start.");
+  await dashboard.locator("#resume-run:not([disabled])").click();
+  await dashboard.locator("#confirm-inventory:not([disabled])").waitFor();
+  assert((await dashboard.locator("#inventory-summary").textContent())?.includes("2 conversations"), "Dashboard inventory summary did not reconcile two conversations.");
+  await dashboard.locator("#confirm-inventory").click();
+
+  await dashboard.locator("#scope-account").uncheck();
+  await dashboard.locator("#scope-assets").uncheck();
+  await dashboard.locator("#batch-size").fill("1");
+  await dashboard.locator("#run-capture").click();
+  await dashboard.locator("#pause-run:not([disabled])").click();
+  await dashboard.locator('#status[data-state="paused"]').waitFor();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert(batchRequests === 1, "Pause allowed the next capture batch to start.");
+  await dashboard.locator("#resume-run:not([disabled])").click();
+  await dashboard.locator('#status[data-state="complete"]').waitFor({ timeout: 15_000 });
+  assert((await dashboard.locator("#status").textContent())?.includes("Capture complete"), "Dashboard capture did not reach an audited complete state.");
+  const firstTreeHash = await dashboard.evaluate(hashAuthoritativeArchiveTree);
+  assert(firstTreeHash.pathCount >= 18 && typeof firstTreeHash.hash === "string", "Packaged dashboard did not publish the expected archive tree.");
+  await dashboard.locator("#revalidate").click();
+  await dashboard.locator('#status[data-state="complete"]').waitFor();
+  const secondTreeHash = await dashboard.evaluate(hashAuthoritativeArchiveTree);
+  assert(secondTreeHash.hash === firstTreeHash.hash, "Revalidate-only changed authoritative conversation/archive bytes.");
+  console.log(`Chromium packaged dashboard, pause/resume, directory, and archive-tree test passed (${firstTreeHash.hash.slice(0, 12)}).`);
 } finally {
   await context?.close();
   await new Promise((resolve) => server.close(resolve));
@@ -239,6 +300,77 @@ try {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function syntheticConversation(id) {
+  return {
+    id,
+    title: `Synthetic ${id}`,
+    create_time: id.endsWith("1") ? 1 : 3,
+    update_time: id.endsWith("1") ? 2 : 4,
+    current_node: `assistant-${id}`,
+    mapping: {
+      [`root-${id}`]: { id: `root-${id}`, message: null, parent: null, children: [`user-${id}`] },
+      [`user-${id}`]: {
+        id: `user-${id}`,
+        parent: `root-${id}`,
+        children: [`assistant-${id}`],
+        message: {
+          id: `message-user-${id}`,
+          author: { role: "user" },
+          create_time: 1,
+          content: { content_type: "text", parts: ["Synthetic prompt."] },
+          status: "finished_successfully",
+          end_turn: null,
+          recipient: "all",
+          metadata: {},
+        },
+      },
+      [`assistant-${id}`]: {
+        id: `assistant-${id}`,
+        parent: `user-${id}`,
+        children: [],
+        message: {
+          id: `message-assistant-${id}`,
+          author: { role: "assistant" },
+          create_time: 2,
+          content: { content_type: "text", parts: ["Synthetic response."] },
+          status: "finished_successfully",
+          end_turn: true,
+          recipient: "all",
+          metadata: { model_slug: "synthetic-model" },
+        },
+      },
+    },
+  };
+}
+
+async function hashAuthoritativeArchiveTree() {
+  const root = await navigator.storage.getDirectory();
+  const rows = [];
+  async function walk(directory, base) {
+    for await (const [name, handle] of directory.entries()) {
+      const relative = base ? `${base}/${name}` : name;
+      if (handle.kind === "directory") {
+        await walk(handle, relative);
+        continue;
+      }
+      if (!relative.includes("/conversations/")
+        && !relative.includes("/source/inventory/")
+        && !relative.includes("/assets/")) continue;
+      const bytes = await (await handle.getFile()).arrayBuffer();
+      const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
+        .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      rows.push(`${relative}\0${hash}`);
+    }
+  }
+  await walk(root, "");
+  rows.sort();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rows.join("\n")));
+  return {
+    pathCount: rows.length,
+    hash: [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+  };
 }
 
 async function findChromeExecutable() {
