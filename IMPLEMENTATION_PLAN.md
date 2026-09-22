@@ -232,7 +232,7 @@ When a live run reveals a parser or optional-adapter change, preserve the old co
 ### 2026-07-20
 
 - Started Goal Mode with the entire implementation, authenticated export, verification, and public release as the completion condition.
-- Confirmed `/home/travis/Projects/GrokExport` was empty, GitHub CLI is authenticated, and the requested repository can be created from this machine.
+- Confirmed the local GrokExport checkout was empty, GitHub CLI was authenticated, and the requested repository could be created from that machine.
 - Established ignored locations for upstream research checkouts and all private export artifacts before cloning or capturing anything.
 - Cloned six reference implementations and recorded their exact revisions and licenses in `docs/UPSTREAM_RESEARCH.md`.
 - Confirmed that the strongest list contract uses `pageSize` and `pageToken`, while the strongest message contract combines conversation metadata, response nodes, and batched `load-responses` calls.
@@ -275,8 +275,8 @@ When a live run reveals a parser or optional-adapter change, preserve the old co
 
 Status: standalone implementation complete; private full-account acceptance in progress
 Added: 2026-08-01
-Implementation workspace: `/home/travis/Projects/ChatGPTExport`
-Final consolidation workspace: `/home/travis/Projects/ConversationExporters`
+Implementation workspace: a local ChatGPTExport checkout
+Final consolidation workspace: a local ConversationExporters checkout
 Final consolidation target: one source repository with a shared exporter core and two separately packaged least-privilege extensions
 
 This program adds a complete ChatGPT web-history exporter without destabilizing the proven Grok exporter. It deliberately uses two stages. First, build and validate a standalone `ChatGPTExporter` sibling against a real account. Second, after both provider implementations are independently complete, extract only the demonstrated common behavior into one repository. The final repository may share nearly all capture, storage, validation, reporting, and dashboard code, but the public releases remain separate extension packages: the Grok package requests only Grok hosts, and the ChatGPT package requests only ChatGPT and audited asset hosts.
@@ -287,7 +287,7 @@ The implementation must be mechanical enough for an agent unfamiliar with the pr
 
 The expansion is complete only when every condition below is satisfied:
 
-- A standalone Chromium `ChatGPTExporter` extension exists in `/home/travis/Projects/ChatGPTExport`, is version controlled, and can be built, tested, packaged, and loaded without depending on the Grok extension at runtime.
+- A standalone Chromium `ChatGPTExporter` extension exists in a local checkout, is version controlled, and can be built, tested, packaged, and loaded without depending on the Grok extension at runtime.
 - The extension uses the user's already-authenticated `chatgpt.com` tab. It never asks the user to copy a bearer token, never reads browser profile files, never requests Chrome cookie permission, and never persists an access token, session token, authorization header, or cookie.
 - Main-history, archived, project-scoped, shared, and every explicitly selected accessible workspace inventory chain is followed to exhaustion. Duplicate IDs, repeated cursors, suspicious empty pages, response caps, inconsistent totals, and cross-scope membership conflicts are reported.
 - Every inventory item reaches a durable terminal state. A run with a missing conversation body, unaccounted graph node, invalid completion marker, or unresolved retryable conversation failure must not claim conversation completeness.
@@ -305,8 +305,8 @@ Temporary chats that ChatGPT never persisted, already-deleted chats, conversatio
 
 The following rules apply before any research clone, live endpoint observation, or implementation begins:
 
-- Preserve `/home/travis/Projects/GrokExport` at its accepted baseline until the standalone ChatGPT exporter passes its private full-account run. Do not refactor working Grok code during ChatGPT protocol discovery.
-- Create `/home/travis/Projects/ChatGPTExport` as a sibling repository. Copy only provider-independent code that is intentionally reused, retaining original Git authorship where practical and adding a provenance note for copied files.
+- Preserve the local GrokExport checkout at its accepted baseline until the standalone ChatGPT exporter passes its private full-account run. Do not refactor working Grok code during ChatGPT protocol discovery.
+- Create the local ChatGPTExport checkout as a sibling repository. Copy only provider-independent code that is intentionally reused, retaining original Git authorship where practical and adding a provenance note for copied files.
 - Put upstream checkouts under `research/repos/`; ignore that directory before cloning anything. Record exact commit, license, purpose, adopted ideas, and rejected behavior in `docs/UPSTREAM_RESEARCH.md`.
 - Ignore all real exports, run journals, screenshots, HAR files, downloaded assets, browser profiles, cookies, credentials, temporary response captures, environment overrides, and user-selected output directories before a live request is made.
 - Never use `document.cookie`, the Chrome cookies API, browser credential databases, copied bearer tokens, or a persistent headless login. Authentication may exist only ephemerally inside the `MAIN`-world bridge while it performs a user-authorized request.
@@ -698,7 +698,7 @@ Agents must update the progress journal, decision log, and lessons after each me
 #### Phase CG-A — baseline and privacy boundary
 
 - [x] Record clean status, current commit, build hash, package hash, and full test results for GrokExporter.
-- [x] Create `/home/travis/Projects/ChatGPTExport`, initialize Git, add license/package skeleton, and establish ignore/privacy scanning before research or live data.
+- [x] Create the local ChatGPTExport checkout, initialize Git, add license/package skeleton, and establish ignore/privacy scanning before research or live data.
 - [x] Copy the minimal proven core/build/dashboard files with provenance notes and prove the empty extension builds.
 - [x] Clone and pin upstream references under ignored paths; write the research/license matrix.
 - [x] Add this ChatGPT plan to the sibling repository and make it the goal's authoritative checklist.
@@ -807,9 +807,9 @@ The first implementation entry should record the Grok baseline, sibling reposito
 
 ### 2026-08-01 — ChatGPT implementation began
 
-- Created persistent goal `019f8070-7650-7d32-9078-e19f06f2557c`; its completion condition includes the private real-account download, independent reconciliation, unchanged repeat, unified-archive import, and final shared-core consolidation.
+- Created a persistent goal whose completion condition includes the private real-account download, independent reconciliation, unchanged repeat, unified-archive import, and final shared-core consolidation.
 - Verified GrokExporter source baseline `85922d6d307550dc046862e324a38cd68966db6d` with 30/30 tests, typechecking, privacy scan over 58 tracked/unignored files, extension build, and release package SHA-256 `c4957b3dfb679b651c7db2dc32eb5f26527b1829f5af30b2d74afdf039864e7a`. The plan-only baseline commit is `2c01972ee2fa7b4bff9bcc7bc09807f3e1a5ee29`; source and package bytes are unchanged.
-- Initialized `/home/travis/Projects/ChatGPTExport` with the privacy boundary before upstream research or live access. Commits `c703807`, `33eb95e`, and `a803813` establish ignores/scanning/hooks, adopt the authoritative plan, and pin the MIT research references.
+- Initialized the local ChatGPTExport checkout with the privacy boundary before upstream research or live access. Commits `c703807`, `33eb95e`, and `a803813` establish ignores/scanning/hooks, adopt the authoritative plan, and pin the MIT research references.
 - Confirmed `research/repos/` is ignored and contains the exact upstream revisions in the research matrix. No ChatGPT authentication, endpoint, account, or conversation data has been accessed.
 - Next: copy the minimal build/dashboard/core baseline with provenance, replace Grok branding and host permissions with a no-network ChatGPT skeleton, and prove the packaged extension before implementing authentication.
 
@@ -888,7 +888,7 @@ The first implementation entry should record the Grok baseline, sibling reposito
 - Commits `7c8e6e1` and `8336cc3` add conservative request delay/concurrency control with cooperative pause/resume/cancel before the next request, plus complete archive enumeration for independent verification. Commit `c4247cb` audits inventory/completion/normalized sets, marker and byte hashes, raw-to-normalized graph traceability, content-addressed assets, temporary-file absence, byte totals, and writes validation reports, `archive.json`, and streaming import indexes.
 - Commit `4088a60` exposes workspace/scope state, persisted directory permission, aggregate inventory confirmation, account/artifact and asset scope controls, request pacing, batch size, start/resume/retry, pause/resume/cancel, revalidate-only mode, and distinct complete/assets-partial/incomplete/authentication-required states. The packaged Chromium test now uses an extension-origin directory, proves a paused next request does not start, resumes inventory and two-batch capture, reaches audited completion, and preserves an authoritative tree hash across local revalidation.
 - Commit `4c0f8cd` snapshots each prior complete inventory, retains remote-absent conversations separately from the current expected set, and keeps their validated completed records in the import index instead of silently dropping local archive history.
-- Commit `400c283` in `/home/travis/Projects/agent_session_migration` adds ChatGPT adapter `1.1.0` for audited ChatGPTExporter directories. It streams `indexes/conversations.jsonl`, verifies contained paths and normalized hashes, preserves graph branches/memberships/citations/provider extensions, registers assets and per-conversation raw provenance, and proves import/version counts `1→0→1` for first, unchanged, and changed content. The dependency-free archive suite passes 59/59 tests with warnings as errors.
+- Commit `400c283` in the local agent session migration checkout adds ChatGPT adapter `1.1.0` for audited ChatGPTExporter directories. It streams `indexes/conversations.jsonl`, verifies contained paths and normalized hashes, preserves graph branches/memberships/citations/provider extensions, registers assets and per-conversation raw provenance, and proves import/version counts `1→0→1` for first, unchanged, and changed content. The dependency-free archive suite passes 59/59 tests with warnings as errors.
 - ChatGPTExporter passes 60/60 tests across 17 files, privacy scanning over 63 tracked/unignored files, TypeScript, production build, and packaged browser acceptance at this milestone. No live account or private conversation data was accessed.
 - Next: complete the explicit mock integration failure/resume matrix, release documentation, reproducible-package checks, and public repository publication, then begin the authenticated private full-account run.
 

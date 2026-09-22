@@ -19,7 +19,7 @@ const archive = zipSync(files, {
   mtime: new Date("1980-01-02T00:00:00.000Z"),
 });
 await mkdir(releaseRoot, { recursive: true });
-const destination = path.join(releaseRoot, `ChatGPTExporter-${manifest.version}.zip`);
+const destination = path.join(releaseRoot, `ChatGPTExporter-${manifest.version_name ?? manifest.version}.zip`);
 await writeFile(destination, archive);
 console.log(destination);
 
