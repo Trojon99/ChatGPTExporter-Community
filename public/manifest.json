@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ChatGPTExporter",
-  "version": "0.1.6.1",
-  "version_name": "0.1.6-compat.1",
+  "version": "2026.9.1",
+  "version_name": "2026.09.1",
   "description": "Complete, resumable, privacy-first local exports of your ChatGPT conversation history.",
   "permissions": [],
   "host_permissions": ["https://chatgpt.com/*"],

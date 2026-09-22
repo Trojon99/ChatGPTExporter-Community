@@ -1,12 +1,20 @@
-# ChatGPTExporter
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+# ChatGPTExporter Community
 
 **Unofficial community compatibility fork** of [siraht/ChatGPTExporter](https://github.com/siraht/ChatGPTExporter), updated for current ChatGPT web Project pagination and paginated conversation-history endpoints. This fork is not affiliated with or endorsed by OpenAI.
 
-ChatGPTExporter is a local, resumable browser extension for archiving the ChatGPT web history available to your signed-in account. It inventories main, archived, project, shared, and explicitly selected workspace scopes before downloading conversation graphs, account artifacts, and referenced files.
+ChatGPTExporter Community is a privacy-first, local Chromium extension for ChatGPT conversation export and history backup. It inventories main and archived conversations, Projects, and shared chats in workspaces you explicitly select, then captures available conversation content, account artifacts, files, and attachments. It supports accessible personal and ChatGPT Business/Team workspaces as separate local archives.
 
 Authentication stays inside the normal `chatgpt.com` page. The extension never asks for a token or cookie, has no backend or telemetry, and writes only to a directory you choose.
 
-**Private API warning:** This tool uses undocumented ChatGPT web APIs. They change over time and may change again without notice. Review validation reports and raw evidence before relying on an export.
+**Private API warning:** This tool uses undocumented ChatGPT web APIs. They change over time and may change again without notice. Review validation reports and raw evidence before relying on a ChatGPT backup or migration.
+
+## Why this fork exists
+
+Upstream `0.1.6` was affected by changes in current ChatGPT web behavior: real-world Project pagination cursors can be longer and contain Base64 characters; conversation history now uses paginated plural endpoints; long histories require backward pagination; and older message pages may legitimately omit conversation identity fields. This fork adapts to those response shapes while preserving strict initial-page identity checks and fail-closed validation. It does not simply remove identity validation.
+
+The changes relate to upstream [PR #2](https://github.com/siraht/ChatGPTExporter/pull/2), [Issue #4](https://github.com/siraht/ChatGPTExporter/issues/4), and [Issue #5](https://github.com/siraht/ChatGPTExporter/issues/5). The fork has been validated against a real ChatGPT Business workspace containing hundreds of conversations and multiple Projects. Conversation capture and local validation completed successfully. No private workspace identifiers or content are included here.
 
 ## Compatibility changes
 
@@ -18,16 +26,16 @@ Authentication stays inside the normal `chatgpt.com` page. The extension never a
 
 The paginated endpoint supplies message pages rather than a full branch graph. The derived mapping represents the ordered messages returned by those pages; the original pages remain in the raw archive for inspection.
 
-These changes follow upstream [PR #2](https://github.com/siraht/ChatGPTExporter/pull/2), [Issue #4](https://github.com/siraht/ChatGPTExporter/issues/4), and [Issue #5](https://github.com/siraht/ChatGPTExporter/issues/5). See [CHANGELOG.md](CHANGELOG.md) for this fork's release notes.
+See [CHANGELOG.md](CHANGELOG.md) for this fork's release notes.
 
 ## What it preserves
 
 - Every conversation found by normally terminating main, archived, project, and shared inventory chains.
-- Separate histories for every explicitly selected accessible workspace.
+- Separate histories for every explicitly selected accessible personal or Business/Team workspace. This supports ChatGPT Business export without mixing workspaces.
 - The complete provider graph, including branches and inactive nodes, when supplied by a legacy full-graph route; ordered messages and every raw source page from the paginated route.
 - Citations, browsing/tool/code records, Canvas content, completed deep research, unknown future content blocks, and raw provider extensions.
 - Uploaded files, generated images, audio, video, inline binaries, research files, and project-level files when ChatGPT permits retrieval.
-- Memories, custom instructions, settings, beta-feature settings, and sanitized workspace/session metadata as auxiliary account artifacts.
+- Available ChatGPT memories, custom instructions, settings, beta-feature settings, and sanitized workspace/session metadata as auxiliary account artifacts.
 - Previous local conversations that disappear from a later remote inventory, marked absent rather than deleted.
 
 ## Install from source
@@ -35,8 +43,8 @@ These changes follow upstream [PR #2](https://github.com/siraht/ChatGPTExporter/
 Requirements are Node.js 20+ and a Chromium browser that supports Manifest V3 and the File System Access API.
 
 ```sh
-git clone https://github.com/OWNER/ChatGPTExporter.git
-cd ChatGPTExporter
+git clone https://github.com/Trojon99/ChatGPTExporter-Community.git
+cd ChatGPTExporter-Community
 npm ci
 npm run check
 npm run test:e2e
@@ -44,8 +52,6 @@ npm run build
 ```
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist/extension`. Click the extension icon to open its dashboard.
-
-Replace `OWNER` with the account or organization that publishes this compatibility fork. The upstream repository above is the original project and does not contain these fork changes.
 
 ## Export your history
 
@@ -59,6 +65,13 @@ Replace `OWNER` with the account or organization that publishes this compatibili
 
 Do not run multiple exporters against the same account simultaneously. The default 250 ms delay, concurrency 1, and batch size 10 are deliberately conservative.
 
+## Security model and known limitations
+
+- The extension requests only `https://chatgpt.com/*` host access. Authenticated requests run in the existing ChatGPT page; tokens and signed asset URLs stay there. Asset hosts and redirects are validated before local download. There is no backend, telemetry, analytics, or remote archive upload.
+- The archive contains sensitive conversations, memories, titles, file names, and attachments. Keep the selected local directory private. Do not attach raw archives or validation reports to public issues without reviewing them.
+- The exporter can capture only content the signed-in workspace can access through the current web endpoints. Temporary, deleted, inaccessible, or unavailable content cannot be reconstructed. Some legacy or unavailable asset references may return HTTP 404 even when conversation content is complete; validation reports the asset scope as partial.
+- Current paginated responses supply ordered messages rather than a full branch graph. The derived mapping is a linear representation; every provider page is retained as raw evidence. A changed endpoint, malformed page, repeated cursor, or configured page/byte limit produces an explicit incomplete result instead of silent truncation.
+
 ## Archive and import contract
 
 Raw listing/detail/batch revisions are append-preserving under `source/`; paginated details also retain every provider page in `source_pages`. Normalized JSON, Markdown, indexes, and reports are derived and rebuildable. Completion markers are written last and contain hashes of every required conversation artifact.
@@ -69,6 +82,8 @@ The audited directory is directly consumable by the unified Agent Session Archiv
 asm web-import ./ChatGPTExport-WORKSPACE-FINGERPRINT \
   --provider chatgpt-web --account-label personal --dry-run --json
 ```
+
+That external importer can support a later ChatGPT history migration; it is not part of the browser extension.
 
 See [Architecture](docs/ARCHITECTURE.md), [web contract](docs/WEB_CONTRACT.md), [privacy model](docs/PRIVACY.md), and [troubleshooting](docs/TROUBLESHOOTING.md) for the operational details.
 

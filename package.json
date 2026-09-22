@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-exporter",
-  "version": "0.1.6-compat.1",
+  "version": "2026.9.1",
   "private": true,
   "description": "A complete, resumable, privacy-first local exporter for ChatGPT web conversations.",
   "type": "module",
