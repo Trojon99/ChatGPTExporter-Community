@@ -33,7 +33,7 @@ ChatGPTExporter Community 是注重隐私的本地 Chromium 扩展，可用于�
 - 旧接口提供完整对话图时，保存其中的分支和非当前节点；分页接口则保存有序消息和所有原始页面。
 - 引用、浏览／工具／代码记录、Canvas、已完成的深度研究内容、未知内容块及服务端原始扩展字段。
 - ChatGPT 允许访问的上传文件、生成图片、音视频、内联二进制内容、研究文件和 Project 文件。
-- 可访问的 ChatGPT 记忆、自定义指令、设置、测试版功能设置，以及经过处理的工作区／会话元数据。
+- ChatGPT 记忆、自定义指令、设置和测试版功能等账户资料，仅在对应的当前 ChatGPT 网页接口可用时才会抓取。可用性可能因工作区或套餐而异；经过处理的工作区／会话元数据会另行记录。
 - 后续远程清单中消失的既有本地对话：标记为远端缺失，而不是删除本地副本。
 
 ## 从源代码安装与构建
@@ -70,18 +70,15 @@ npm run build
 - 本工具只能抓取已登录工作区通过当前网页接口可访问的内容，无法重建临时、已删除或不可访问的记录。某些旧资源引用或已失效文件可能返回 HTTP 404，即使对话内容已经完整；验证报告会将资源范围标为部分完成。
 - 当前分页响应提供有序消息，而非完整分支图。派生映射是线性表示，所有服务端页面都会保留为原始证据。接口变化、页面格式错误、游标重复或触及页数／字节数上限时，会明确报告未完成，而不是静默截断。
 
-## 归档与迁移接口
+## 本地归档与验证
 
 `source/` 下的原始清单、对话详情及批量抓取修订会追加保存；分页详情还会在 `source_pages` 中保留每个服务端页面。规范化 JSON、Markdown、索引和报告是可重建的派生文件。完成标记最后写入，记录所有必要对话文件的哈希。
 
-经过审计的目录可以交给独立的 Agent Session Archive 适配器使用，无需合成一个巨大的 `conversations.json`：
+详细运行说明见英文的 [架构](docs/ARCHITECTURE.md)、[网页数据契约](docs/WEB_CONTRACT.md)、[隐私模型](docs/PRIVACY.md) 和 [故障排查](docs/TROUBLESHOOTING.md)。
 
-```sh
-asm web-import ./ChatGPTExport-WORKSPACE-FINGERPRINT \
-  --provider chatgpt-web --account-label personal --dry-run --json
-```
+## 可选的高级集成
 
-这个外部导入器可用于后续的 ChatGPT 历史迁移；它不是浏览器扩展的一部分。详细运行说明见英文的 [架构](docs/ARCHITECTURE.md)、[网页数据契约](docs/WEB_CONTRACT.md)、[隐私模型](docs/PRIVACY.md) 和 [故障排查](docs/TROUBLESHOOTING.md)。
+ChatGPTExporter 可以独立工作，导出和验证本地归档都不需要其他工具。`asm` / Agent Session Archive 是另一个独立的外部项目，只有你选择后续迁移或导入流程时才与之相关；它没有包含在此扩展中，也不是使用此扩展的必要条件。
 
 ## 开发
 

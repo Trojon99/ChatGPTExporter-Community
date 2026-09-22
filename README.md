@@ -35,7 +35,7 @@ See [CHANGELOG.md](CHANGELOG.md) for this fork's release notes.
 - The complete provider graph, including branches and inactive nodes, when supplied by a legacy full-graph route; ordered messages and every raw source page from the paginated route.
 - Citations, browsing/tool/code records, Canvas content, completed deep research, unknown future content blocks, and raw provider extensions.
 - Uploaded files, generated images, audio, video, inline binaries, research files, and project-level files when ChatGPT permits retrieval.
-- Available ChatGPT memories, custom instructions, settings, beta-feature settings, and sanitized workspace/session metadata as auxiliary account artifacts.
+- Account artifacts such as ChatGPT memories, custom instructions, settings, and beta features are captured when the corresponding current ChatGPT web endpoint is available. Availability may vary by workspace or plan; sanitized workspace/session metadata is recorded separately.
 - Previous local conversations that disappear from a later remote inventory, marked absent rather than deleted.
 
 ## Install from source
@@ -72,20 +72,15 @@ Do not run multiple exporters against the same account simultaneously. The defau
 - The exporter can capture only content the signed-in workspace can access through the current web endpoints. Temporary, deleted, inaccessible, or unavailable content cannot be reconstructed. Some legacy or unavailable asset references may return HTTP 404 even when conversation content is complete; validation reports the asset scope as partial.
 - Current paginated responses supply ordered messages rather than a full branch graph. The derived mapping is a linear representation; every provider page is retained as raw evidence. A changed endpoint, malformed page, repeated cursor, or configured page/byte limit produces an explicit incomplete result instead of silent truncation.
 
-## Archive and import contract
+## Local archive and validation
 
 Raw listing/detail/batch revisions are append-preserving under `source/`; paginated details also retain every provider page in `source_pages`. Normalized JSON, Markdown, indexes, and reports are derived and rebuildable. Completion markers are written last and contain hashes of every required conversation artifact.
 
-The audited directory is directly consumable by the unified Agent Session Archive adapter; it does not need a giant synthesized `conversations.json`:
-
-```sh
-asm web-import ./ChatGPTExport-WORKSPACE-FINGERPRINT \
-  --provider chatgpt-web --account-label personal --dry-run --json
-```
-
-That external importer can support a later ChatGPT history migration; it is not part of the browser extension.
-
 See [Architecture](docs/ARCHITECTURE.md), [web contract](docs/WEB_CONTRACT.md), [privacy model](docs/PRIVACY.md), and [troubleshooting](docs/TROUBLESHOOTING.md) for the operational details.
+
+## Optional advanced integration
+
+ChatGPTExporter works independently: no other tool is needed to export or validate its local archives. `asm` / Agent Session Archive is a separate external project, relevant only if you choose a later migration or import workflow. It is not bundled with or required by this extension.
 
 ## Development
 
