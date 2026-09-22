@@ -15,6 +15,8 @@ const certificatePath = path.join(temporaryRoot, "certificate.pem");
 const keyPath = path.join(temporaryRoot, "key.pem");
 let conversationListingRequests = 0;
 let batchRequests = 0;
+let currentReads = 0;
+let olderReads = 0;
 execFileSync("openssl", [
   "req", "-x509", "-newkey", "rsa:2048", "-nodes",
   "-keyout", keyPath,
@@ -83,6 +85,41 @@ const server = https.createServer({
         limit: Number(requestUrl.searchParams.get("limit") ?? 100),
       } : { error: "fixture rejected request" }));
     }, 75);
+    return;
+  }
+  if (/^\/backend-api\/conversations\/[^/]+$/.test(requestUrl.pathname)) {
+    currentReads += 1;
+    if (request.headers.authorization !== "Bearer synthetic-page-local-secret"
+      || request.headers["x-authorization"] !== "Bearer synthetic-page-local-secret") {
+      response.writeHead(401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "synthetic authorization required" }));
+      return;
+    }
+    const id = requestUrl.pathname.split("/").at(-1);
+    const detail = syntheticConversation(id);
+    const messages = id === "conversation-1"
+      ? [detail.mapping[`assistant-${id}`].message]
+      : [detail.mapping[`user-${id}`].message, detail.mapping[`assistant-${id}`].message];
+    setTimeout(() => {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ conversation_id: id, title: detail.title ?? "Synthetic", create_time: 1, update_time: 2,
+        messages, page_info: { has_previous_page: id === "conversation-1", has_next_page: false, start_cursor: messages[0].id } }));
+    }, 75);
+    return;
+  }
+  if (requestUrl.pathname === "/backend-api/conversations/conversation-1/messages") {
+    olderReads += 1;
+    if (request.headers.authorization !== "Bearer synthetic-page-local-secret"
+      || request.headers["x-authorization"] !== "Bearer synthetic-page-local-secret"
+      || requestUrl.searchParams.get("before") !== "message-assistant-conversation-1") {
+      response.writeHead(401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "synthetic pagination request rejected" }));
+      return;
+    }
+    const userMessage = syntheticConversation("conversation-1").mapping["user-conversation-1"].message;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ messages: [userMessage],
+      page_info: { has_previous_page: false, has_next_page: true, start_cursor: userMessage.id } }));
     return;
   }
   if (requestUrl.pathname === "/backend-api/conversations/batch") {
@@ -332,10 +369,12 @@ try {
   await dashboard.locator("#pause-run:not([disabled])").click();
   await dashboard.locator('#status[data-state="paused"]').waitFor();
   await new Promise((resolve) => setTimeout(resolve, 250));
-  assert(batchRequests === 1, "Pause allowed the next capture batch to start.");
+  assert(currentReads === 1, "Pause allowed the next conversation body request to start.");
   await dashboard.locator("#resume-run:not([disabled])").click();
   await dashboard.locator('#status[data-state="complete"]').waitFor({ timeout: 15_000 });
   assert((await dashboard.locator("#status").textContent())?.includes("Capture complete"), "Dashboard capture did not reach an audited complete state.");
+  assert(batchRequests === 0 && currentReads === 2 && olderReads === 1,
+    "Capture did not complete identity-free backward pagination through the plural conversation endpoint.");
   const firstTreeHash = await dashboard.evaluate(hashAuthoritativeArchiveTree);
   assert(firstTreeHash.pathCount >= 18 && typeof firstTreeHash.hash === "string", "Packaged dashboard did not publish the expected archive tree.");
   await dashboard.locator("#revalidate").click();

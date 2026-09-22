@@ -1,6 +1,7 @@
 import type { InventoryConversation, JsonValue } from "../core/types";
 import type { ChatGptTransport, DiscoveredWorkspace } from "./client";
 import { EnvelopeError, parseConversationDetail, type ChatGptConversationDetail } from "./envelopes";
+import { fetchPaginatedDetail } from "./paginated-detail";
 
 export interface RawBatchCapture {
   requestedConversationIds: string[];
@@ -16,7 +17,7 @@ export interface RetrievedConversationDetail {
   inventory: InventoryConversation;
   detail: ChatGptConversationDetail;
   raw: JsonValue;
-  source: "batch" | "single" | "shared";
+  source: "batch" | "single" | "shared" | "paginated";
   fallbackReason?: "batch_missing" | "batch_duplicate" | "batch_invalid" | "batch_graph_suspicious";
   correlationId: string;
   responseBytes: number;
@@ -48,10 +49,27 @@ export class ChatGptDetailFetcher {
 
     for (let offset = 0; offset < regular.length; offset += this.batchSize) {
       const group = regular.slice(offset, offset + this.batchSize);
-      const result = await this.fetchBatch(group);
-      batches.push(result.batch);
-      output.push(...result.conversations);
-      await checkpoint?.({ batches: [result.batch], conversations: result.conversations });
+      const first = await this.fetchCurrent(group[0]!).catch((error: unknown) => {
+        if (isNotFound(error)) return null;
+        throw error;
+      });
+      if (first === null) {
+        // Older cohorts may only expose the legacy full-graph routes.
+        const result = await this.fetchBatch(group);
+        if (result.batch) batches.push(result.batch);
+        output.push(...result.conversations);
+        await checkpoint?.({ batches: result.batch ? [result.batch] : [], conversations: result.conversations });
+      } else {
+        const conversations = [first];
+        for (const conversation of group.slice(1)) {
+          conversations.push(await this.fetchCurrent(conversation).catch((error: unknown) => {
+            if (isNotFound(error)) return this.fetchSingle(conversation, "batch_missing");
+            throw error;
+          }));
+        }
+        output.push(...conversations);
+        await checkpoint?.({ batches: [], conversations });
+      }
     }
     for (const conversation of shared) {
       const retrieved = await this.fetchShared(conversation, shareIdFor(conversation)!);
@@ -67,12 +85,26 @@ export class ChatGptDetailFetcher {
     return { batches, conversations: output };
   }
 
-  private async fetchBatch(group: InventoryConversation[]): Promise<{ batch: RawBatchCapture; conversations: RetrievedConversationDetail[] }> {
+  private async fetchCurrent(conversation: InventoryConversation): Promise<RetrievedConversationDetail> {
+    const result = await fetchPaginatedDetail(this.transport, conversation.conversationId, this.workspace.accountId);
+    const findings = graphFindings(result.detail);
+    if (findings.length) throw new DetailCaptureError("PAGINATED_GRAPH_INVALID", `Paginated detail graph is invalid: ${findings.join(", ")}`);
+    return { inventory: conversation, ...result, source: "paginated" };
+  }
+
+  private async fetchBatch(group: InventoryConversation[]): Promise<{ batch?: RawBatchCapture; conversations: RetrievedConversationDetail[] }> {
     const requestedIds = group.map((conversation) => conversation.conversationId);
     const response = await this.transport.request({
       operation: "conversation_batch",
       parameters: { conversationIds: requestedIds },
-    }, this.workspace.accountId, 120_000);
+    }, this.workspace.accountId, 120_000).catch(async (error: unknown) => {
+      if (!isNotFound(error)) throw error;
+      return null;
+    });
+    if (response === null) {
+      const conversations = await Promise.all(group.map((conversation) => this.fetchSingle(conversation, "batch_missing")));
+      return { conversations };
+    }
     const candidates = batchCandidates(response.body);
     const candidateById = new Map<string, { raw: JsonValue; parsed?: ChatGptConversationDetail; issue?: BatchFallbackReason }>();
     const duplicateIds = new Set<string>();
@@ -84,6 +116,9 @@ export class ChatGptDetailFetcher {
         parsed = parseConversationDetail(raw);
         id = parsed.id ?? parsed.conversation_id ?? null;
         if (!id || !requestedIds.includes(id)) continue;
+        if (parsed.id !== undefined && parsed.conversation_id !== undefined && parsed.id !== parsed.conversation_id) {
+          issue = "batch_invalid";
+        }
         if (!hasOnlySafeCompactNullRoot(raw) || graphFindings(parsed).length) issue = "batch_graph_suspicious";
       } catch (error) {
         if (!(error instanceof EnvelopeError)) throw error;
@@ -244,10 +279,16 @@ function looseConversationId(value: JsonValue): string | null {
 
 function assertRequestedIdentity(requestedId: string, detail: ChatGptConversationDetail): void {
   const returnedId = detail.id ?? detail.conversation_id;
-  if (returnedId !== requestedId) throw new DetailCaptureError("DETAIL_ID_MISMATCH", `Requested ${requestedId} but ChatGPT returned ${returnedId ?? "no id"}.`);
+  if (returnedId !== requestedId || (detail.id !== undefined && detail.conversation_id !== undefined && detail.id !== detail.conversation_id)) {
+    throw new DetailCaptureError("DETAIL_ID_MISMATCH", "ChatGPT returned a different conversation identity.");
+  }
 }
 
 function shareIdFor(conversation: InventoryConversation): string | null {
   if (!conversation.conversationId.startsWith("share_")) return null;
   return conversation.memberships.find((membership) => membership.scope === "shared")?.shareId ?? null;
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "status" in error && error.status === 404;
 }

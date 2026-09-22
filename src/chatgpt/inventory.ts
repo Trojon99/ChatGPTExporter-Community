@@ -431,9 +431,12 @@ function nullableTotal(value: JsonValue | undefined, name: string): number | nul
 }
 
 function optionalCursor(value: JsonValue | undefined, name: string): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string" || !/^[A-Za-z0-9._~-]{1,512}$/.test(value)) throw new InventoryError("INVALID_INVENTORY_ENVELOPE", `${name} is invalid.`);
-  return value;
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+  if (typeof value === "string" && /^[A-Za-z0-9._~+/:=-]{1,4096}$/.test(value)) return value;
+  const length = typeof value === "string" ? value.length : 0;
+  const unexpected = typeof value === "string" ? [...new Set(value.replace(/[A-Za-z0-9._~+/:=-]/g, ""))].map((character) => `U+${character.codePointAt(0)!.toString(16).toUpperCase()}`).join(",") : "non-string";
+  throw new InventoryError("INVALID_INVENTORY_ENVELOPE", `${name} is invalid (length ${length}; unexpected ${unexpected || "none"}).`);
 }
 
 function parseProject(value: JsonObject, index: number): Omit<InventoryProject, "rawHash"> {

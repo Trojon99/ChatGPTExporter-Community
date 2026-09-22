@@ -10,6 +10,8 @@ export type ChatGptOperation =
   | "shared_detail"
   | "conversation_batch"
   | "conversation_detail"
+  | "conversation_current"
+  | "conversation_messages"
   | "account_artifact"
   | "asset_open"
   | "asset_chunk"
@@ -25,6 +27,8 @@ export type ChatGptOperationParameters =
   | { operation: "shared_detail"; parameters: { shareId: string } }
   | { operation: "conversation_batch"; parameters: { conversationIds: string[] } }
   | { operation: "conversation_detail"; parameters: { conversationId: string } }
+  | { operation: "conversation_current"; parameters: { conversationId: string } }
+  | { operation: "conversation_messages"; parameters: { conversationId: string; before: string } }
   | { operation: "account_artifact"; parameters: { kind: "memories" | "custom_instructions" | "settings" | "beta_features" } }
   | { operation: "asset_open"; parameters: { fileId: string; conversationId: string | null; projectId: string | null } }
   | { operation: "asset_chunk"; parameters: { handleId: string; offset: number; length: number } }
@@ -40,7 +44,8 @@ export interface ResolvedEndpoint {
 }
 
 const IDENTIFIER = /^[A-Za-z0-9_-]{1,256}$/;
-const CURSOR = /^[A-Za-z0-9._~-]{1,512}$/;
+const CURSOR = /^[A-Za-z0-9._~+/:=-]{1,4096}$/;
+const MESSAGE_CURSOR = /^[A-Za-z0-9._~+/:=-]{1,4096}$/;
 const MAX_PAGE_SIZE = 100;
 const MAX_BATCH_SIZE = 10;
 
@@ -99,6 +104,16 @@ export function resolveEndpoint(request: ChatGptOperationParameters): ResolvedEn
     case "conversation_detail": {
       const conversationId = assertIdentifier(request.parameters.conversationId, "conversationId");
       return endpoint("GET", `/backend-api/conversation/${conversationId}`, true, 100_000_000, request.operation);
+    }
+    case "conversation_current":
+    case "conversation_messages": {
+      const id = assertIdentifier(request.parameters.conversationId, "conversationId");
+      if (request.operation === "conversation_messages") {
+        const query = new URLSearchParams({ before: assertMessageCursor(request.parameters.before) });
+        return endpoint("GET", `/backend-api/conversations/${id}/messages?${query}`, true, 100_000_000, request.operation);
+      }
+      const query = new URLSearchParams({ include_has_versions: "true", num_turns: "100" });
+      return endpoint("GET", `/backend-api/conversations/${id}?${query}`, true, 100_000_000, request.operation);
     }
     case "account_artifact": {
       const paths = {
@@ -182,11 +197,18 @@ export function parseOperationRequest(value: unknown): ChatGptOperationParameter
       }
       return { operation: request.operation, parameters: { conversationIds: [...parameters.conversationIds] } };
     case "conversation_detail":
+    case "conversation_current":
       assertOnlyKeys(parameters, ["conversationId"]);
       return {
         operation: request.operation,
         parameters: { conversationId: requireString(parameters.conversationId, "conversationId") },
       };
+    case "conversation_messages":
+      assertOnlyKeys(parameters, ["conversationId", "before"]);
+      return { operation: request.operation, parameters: {
+        conversationId: requireString(parameters.conversationId, "conversationId"),
+        before: requireString(parameters.before, "before"),
+      } };
     case "account_artifact":
       assertOnlyKeys(parameters, ["kind"]);
       if (!["memories", "custom_instructions", "settings", "beta_features"].includes(String(parameters.kind))) {
@@ -266,6 +288,11 @@ function assertIdentifier(value: string, name: string): string {
 
 function assertCursor(value: string): string {
   if (!CURSOR.test(value)) throw new EndpointValidationError("cursor contains invalid characters");
+  return value;
+}
+
+function assertMessageCursor(value: string): string {
+  if (!MESSAGE_CURSOR.test(value)) throw new EndpointValidationError("message cursor contains invalid characters");
   return value;
 }
 

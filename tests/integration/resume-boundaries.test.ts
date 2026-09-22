@@ -144,6 +144,7 @@ async function fixtureFilesystem(): Promise<MemoryArchiveFileSystem> {
 
 function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
+    if (operation.operation === "conversation_current") throw Object.assign(new Error("synthetic legacy route"), { status: 404 });
     if (operation.operation !== "conversation_batch") throw new Error(`unexpected ${operation.operation}`);
     const body: JsonValue = [detail as unknown as JsonValue];
     return {

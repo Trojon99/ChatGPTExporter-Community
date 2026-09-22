@@ -67,7 +67,7 @@ describe("journaled ChatGPT capture engine", () => {
     const transport = fixtureTransport();
     const result = await new ChatGptCaptureEngine({ transport, filesystem, workspace, runId: "run-2", now: clock() }).run();
     expect(result.capturedCount).toBe(1);
-    expect(transport.request).toHaveBeenCalledTimes(1);
+    expect(transport.request).toHaveBeenCalledTimes(2);
   });
 
   it("publishes content-addressed assets, normalized links, and a global asset index", async () => {
@@ -115,6 +115,7 @@ describe("journaled ChatGPT capture engine", () => {
     await filesystem.writeTextAtomic("inventory.json", prettyJson(inventory));
     const transient = Object.assign(new Error("synthetic throttle"), { code: "RATE_LIMITED", retryable: true, correlationId: "synthetic-correlation" });
     const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
+      if (operation.operation === "conversation_current") throw Object.assign(new Error("synthetic legacy route"), { status: 404 });
       if (operation.operation !== "conversation_batch") throw new Error(`unexpected ${operation.operation}`);
       const id = operation.parameters.conversationIds[0]!;
       if (id === "conversation-2") throw transient;
@@ -189,6 +190,7 @@ function fixtureTransport(detail = conversationDetail()): ChatGptTransport & { r
   const projectBytes = new TextEncoder().encode("project bytes");
   const handles = new Set<string>();
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
+    if (operation.operation === "conversation_current") throw Object.assign(new Error("synthetic legacy route"), { status: 404 });
     let body: JsonValue;
     if (operation.operation === "account_artifact") {
       body = operation.parameters.kind === "memories"

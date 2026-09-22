@@ -139,6 +139,46 @@ describe("ChatGPT complete inventory", () => {
     }
   });
 
+  it("accepts long base64 and numeric project cursors, and empty-string termination", async () => {
+    for (const firstCursor of ["a".repeat(544) + "+/=:", 47]) {
+      const requested: Array<string | null> = [];
+      const transport = scriptedTransport((operation) => {
+        if (operation.operation === "conversation_page") return page([], 0, 0);
+        if (operation.operation === "project_page") {
+          requested.push(operation.parameters.cursor);
+          return operation.parameters.cursor === null
+            ? { items: [{ gizmo: { gizmo: { id: "project-1" } } }], cursor: firstCursor }
+            : { items: [], cursor: "" };
+        }
+        if (operation.operation === "project_conversation_page") return { items: [], cursor: "" };
+        throw new Error("unexpected operation");
+      });
+      const inventory = await new ChatGptInventoryEngine({
+        transport,
+        filesystem: new MemoryArchiveFileSystem(),
+        workspace,
+        settings: { ...DEFAULT_INVENTORY_SETTINGS, includeArchived: false, includeProjects: true, includeShared: false },
+      }).run();
+      expect(requested).toEqual([null, String(firstCursor)]);
+      expect(inventory.complete).toBe(true);
+    }
+  });
+
+  it("rejects malformed project cursors without echoing their content", async () => {
+    const secret = "private cursor with spaces";
+    const transport = scriptedTransport((operation) => operation.operation === "conversation_page"
+      ? page([], 0, 0)
+      : { items: [{ gizmo: { gizmo: { id: "project-1" } } }], cursor: secret });
+    const error = await new ChatGptInventoryEngine({
+      transport,
+      filesystem: new MemoryArchiveFileSystem(),
+      workspace,
+      settings: { ...DEFAULT_INVENTORY_SETTINGS, includeArchived: false, includeProjects: true, includeShared: false },
+    }).run().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "INVALID_INVENTORY_ENVELOPE" });
+    expect(String(error)).not.toContain(secret);
+  });
+
   it("writes raw evidence before refusing to publish an incomplete inventory", async () => {
     const filesystem = new MemoryArchiveFileSystem();
     const engine = new ChatGptInventoryEngine({

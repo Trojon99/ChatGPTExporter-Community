@@ -116,6 +116,7 @@ function fullTransport(): ChatGptTransport & { request: ReturnType<typeof vi.fn>
   const projectBytes = new TextEncoder().encode("project-level file");
   const handles = new Set<string>();
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
+    if (operation.operation === "conversation_current") throw Object.assign(new Error("synthetic legacy route"), { status: 404 });
     let body: JsonValue;
     if (operation.operation === "conversation_page") {
       const all = operation.parameters.archived

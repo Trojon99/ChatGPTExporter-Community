@@ -15,6 +15,19 @@ describe("ChatGPT endpoint allowlist", () => {
     });
   });
 
+  it("encodes bounded provider cursors and current conversation pages", () => {
+    const cursor = "a".repeat(544) + "+/=:";
+    const project = resolveEndpoint({ operation: "project_page", parameters: { cursor } });
+    expect(new URL(project.path, "https://chatgpt.com").searchParams.get("cursor")).toBe(cursor);
+    expect(resolveEndpoint({ operation: "conversation_current", parameters: { conversationId: "conversation-1" } }).path)
+      .toBe("/backend-api/conversations/conversation-1?include_has_versions=true&num_turns=100");
+    const older = resolveEndpoint({ operation: "conversation_messages", parameters: { conversationId: "conversation-1", before: cursor } });
+    expect(new URL(older.path, "https://chatgpt.com").searchParams.get("before")).toBe(cursor);
+    expect(new URL(older.path, "https://chatgpt.com").searchParams.size).toBe(1);
+    expect(() => resolveEndpoint({ operation: "conversation_messages", parameters: { conversationId: "conversation-1", before: "bad cursor" } })).toThrow("message cursor");
+    expect(() => resolveEndpoint({ operation: "project_page", parameters: { cursor: "x".repeat(4097) } })).toThrow("cursor");
+  });
+
   it("accepts only bounded identifiers, cursors, pages, and batch sizes", () => {
     expect(() => resolveEndpoint({
       operation: "conversation_detail",

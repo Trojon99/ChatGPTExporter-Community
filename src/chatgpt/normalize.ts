@@ -196,7 +196,7 @@ function contentText(content: ChatGptMessageContent): string {
 }
 
 function conversationExtensions(raw: ChatGptConversationDetail): JsonObject {
-  const excluded = new Set(["mapping"]);
+  const excluded = new Set(["mapping", "source_pages"]);
   return Object.fromEntries(Object.entries(raw).filter(([key]) => !excluded.has(key)).map(([key, value]) => [key, toJsonValue(value)]));
 }
 

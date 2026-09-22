@@ -24,7 +24,7 @@ export interface RawCompletionMarker {
   detailPath: string;
   batchHash: string | null;
   batchPath: string | null;
-  retrievalSource: "batch" | "single" | "shared";
+  retrievalSource: "batch" | "single" | "shared" | "paginated";
   completedAt: string;
 }
 

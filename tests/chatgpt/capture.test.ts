@@ -15,7 +15,7 @@ const workspace: DiscoveredWorkspace = {
   deactivated: false,
 };
 
-describe("ChatGPT batch-first detail retrieval", () => {
+describe("legacy full-graph retrieval after a plural endpoint 404", () => {
   it("uses complete batch records without single-detail requests", async () => {
     const transport = transportFor((operation) => {
       if (operation.operation === "conversation_batch") return [conversationDetail() as unknown as JsonValue];
@@ -24,7 +24,7 @@ describe("ChatGPT batch-first detail retrieval", () => {
     const result = await new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()]);
     expect(result.conversations[0]).toMatchObject({ source: "batch" });
     expect(result.batches[0]).toMatchObject({ missingConversationIds: [], suspiciousConversationIds: [] });
-    expect(transport.request).toHaveBeenCalledTimes(1);
+    expect(transport.request).toHaveBeenCalledTimes(2);
   });
 
   it("accepts only the live compact null-root batch variant", async () => {
@@ -37,7 +37,7 @@ describe("ChatGPT batch-first detail retrieval", () => {
     });
     const result = await new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()]);
     expect(result.conversations[0]).toMatchObject({ source: "batch", detail: { mapping: { "root-1": { parent: null, message: null } } } });
-    expect(transport.request).toHaveBeenCalledTimes(1);
+    expect(transport.request).toHaveBeenCalledTimes(2);
   });
 
   it("keeps compact live batches with ISO and omitted timestamps on the batch path", async () => {
@@ -65,7 +65,7 @@ describe("ChatGPT batch-first detail retrieval", () => {
         mapping: { "user-1": { message: { create_time: null } } },
       },
     });
-    expect(transport.request).toHaveBeenCalledTimes(1);
+    expect(transport.request).toHaveBeenCalledTimes(2);
   });
 
   it("falls back when a compact placeholder is not a detached root", async () => {
@@ -79,7 +79,7 @@ describe("ChatGPT batch-first detail retrieval", () => {
     });
     const result = await new ChatGptDetailFetcher(transport, workspace).fetchAll([inventoryItem()]);
     expect(result.conversations[0]).toMatchObject({ source: "single", fallbackReason: "batch_graph_suspicious" });
-    expect(transport.request).toHaveBeenCalledTimes(2);
+    expect(transport.request).toHaveBeenCalledTimes(3);
   });
 
   it("falls back individually for omitted, malformed, duplicate, and graph-suspicious batch records", async () => {
@@ -102,7 +102,7 @@ describe("ChatGPT batch-first detail retrieval", () => {
       "batch_duplicate",
       "batch_graph_suspicious",
     ]);
-    expect(transport.request).toHaveBeenCalledTimes(5);
+    expect(transport.request).toHaveBeenCalledTimes(6);
   });
 
   it("uses the share adapter for share-only inventory records", async () => {
@@ -158,6 +158,7 @@ function inventoryItem(id = "conversation-1"): InventoryConversation {
 
 function transportFor(handler: (operation: ChatGptOperationParameters) => JsonValue): ChatGptTransport & { request: ReturnType<typeof vi.fn> } {
   const request = vi.fn(async (operation: ChatGptOperationParameters): Promise<ApiSuccessResponse> => {
+    if (operation.operation === "conversation_current") throw Object.assign(new Error("synthetic legacy route"), { status: 404 });
     const body = handler(operation);
     return {
       requestId: "request-1",
